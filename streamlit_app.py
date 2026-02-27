@@ -87,10 +87,11 @@ def build_graph(assets_df: pd.DataFrame):
     metrics["betweenness"] = metrics["asset_id"].map(betweenness).fillna(0)
 
     def norm(s: pd.Series) -> pd.Series:
+        s = pd.to_numeric(s, errors="coerce")
         span = s.max() - s.min()
-        if span <= 1e-9:
-            return pd.Series(np.zeros(len(s)), index=s.index)
-        return (s - s.min()) / span
+        if pd.isna(span) or span <= 1e-9:
+            return pd.Series(0.0, index=s.index, dtype=float)
+        return ((s - s.min()) / span).replace([np.inf, -np.inf], np.nan).fillna(0.0)
 
     metrics["out_degree_n"] = norm(metrics["out_degree"])
     metrics["betweenness_n"] = norm(metrics["betweenness"])
@@ -387,6 +388,18 @@ def traffic_light_text(value: float, green: float, yellow: float) -> str:
     return "🔴 Red"
 
 
+def sanitize_chart_df(df: pd.DataFrame, required_cols=None) -> pd.DataFrame:
+    """Remove NaN/inf from chart-bound dataframes to avoid Vega-Lite front-end crashes."""
+    out = df.copy()
+    out = out.replace([np.inf, -np.inf], np.nan)
+    if required_cols:
+        cols = [c for c in required_cols if c in out.columns]
+        if cols:
+            out = out.dropna(subset=cols)
+    out = out.dropna(how="all")
+    return out
+
+
 # ------------------------------
 # App UI
 # ------------------------------
@@ -521,10 +534,11 @@ def main():
 
         overview_cols = ["asset_id", "asset_name", "subsystem", "criticality", "current_health", "anomaly_score", "systemic_priority", "risk_score"]
         risk_rank = model_df[overview_cols].sort_values("risk_score", ascending=False)
+        risk_rank_chart = sanitize_chart_df(risk_rank, ["risk_score", "asset_name"])
         st.dataframe(risk_rank, use_container_width=True, hide_index=True)
 
         chart = (
-            alt.Chart(risk_rank)
+            alt.Chart(risk_rank_chart)
             .mark_bar(cornerRadiusTopLeft=5, cornerRadiusTopRight=5)
             .encode(
                 x=alt.X("risk_score:Q", title="Risk Score"),
@@ -560,8 +574,9 @@ def main():
 
         top_n = st.slider("Top N assets by systemic priority", 5, len(priority_df), 10)
         top_df = priority_df.head(top_n)
+        top_df_chart = sanitize_chart_df(top_df, ["systemic_priority", "asset_name"])
         pr_chart = (
-            alt.Chart(top_df)
+            alt.Chart(top_df_chart)
             .mark_bar(cornerRadiusTopLeft=5, cornerRadiusTopRight=5)
             .encode(
                 x=alt.X("systemic_priority:Q", title="Systemic Priority"),
@@ -593,10 +608,11 @@ def main():
                     "from": u, "to": v,
                 }
             )
-        edges_df = pd.DataFrame(edge_rows)
+        edges_df = sanitize_chart_df(pd.DataFrame(edge_rows), ["x", "y", "x2", "y2", "impact_strength"])
 
         layout_df["impact_strength"] = layout_df["asset_id"].map(impact).fillna(0)
         layout_df["selected"] = np.where(layout_df["asset_id"] == selected_asset["asset_id"], "Selected", "Other")
+        layout_df_chart = sanitize_chart_df(layout_df, ["x", "y", "risk_score", "impact_strength", "asset_id"])
 
         edges_chart = (
             alt.Chart(edges_df)
@@ -610,7 +626,7 @@ def main():
         )
 
         nodes_chart = (
-            alt.Chart(layout_df)
+            alt.Chart(layout_df_chart)
             .mark_circle(stroke="white", strokeWidth=1.2)
             .encode(
                 x=alt.X("x:Q", axis=None),
@@ -623,7 +639,7 @@ def main():
         )
 
         labels = (
-            alt.Chart(layout_df)
+            alt.Chart(layout_df_chart)
             .mark_text(dy=-12, fontSize=11)
             .encode(x="x:Q", y="y:Q", text="asset_id:N")
         )
@@ -642,47 +658,61 @@ def main():
         st.info("頁面說明：查看 90 天健康趨勢、異常分數和操作模式變化，輔助預估達到門檻的剩餘天數。")
 
         asset_ts = ts_df[ts_df["asset_id"] == selected_asset["asset_id"]].sort_values("date").reset_index(drop=True).copy()
+        asset_ts = sanitize_chart_df(asset_ts, ["date", "health_index", "anomaly_score"])
         threshold = 60
 
         st.caption("可用滑桿模擬時間推進，觀察單一機台健康值下降速度；虛線為二次擬合趨勢。")
-        sim_day = st.slider("Simulation Day (time progression)", min_value=15, max_value=len(asset_ts), value=len(asset_ts), step=1)
+        min_sim = 3 if len(asset_ts) >= 3 else 1
+        default_sim = len(asset_ts) if len(asset_ts) > 0 else 1
+        sim_day = st.slider("Simulation Day (time progression)", min_value=min_sim, max_value=default_sim, value=default_sim, step=1)
         sim_ts = asset_ts.iloc[:sim_day].copy()
+        sim_ts = sanitize_chart_df(sim_ts, ["date", "health_index", "anomaly_score"])
+        if sim_ts.empty:
+            st.warning("No data available for the selected range.")
+            sim_ts = asset_ts.copy()
         sim_ts["t_idx"] = np.arange(len(sim_ts))
         if len(sim_ts) >= 3:
             coef = np.polyfit(sim_ts["t_idx"], sim_ts["health_index"], 2)
             sim_ts["health_quad_fit"] = np.polyval(coef, sim_ts["t_idx"])
         else:
             sim_ts["health_quad_fit"] = sim_ts["health_index"]
-
-        health_line = (
-            alt.Chart(sim_ts)
-            .mark_line(point=False, strokeWidth=2)
-            .encode(
-                x=alt.X("date:T", title="Date"),
-                y=alt.Y("health_index:Q", title="Health Index", scale=alt.Scale(domain=[0, 100])),
-                color=alt.value("#1f77b4"),
-                tooltip=["date:T", "health_index:Q", "operating_mode:N"],
+        sim_ts_clean = sanitize_chart_df(sim_ts, ["date", "health_index", "health_quad_fit", "anomaly_score"])
+        if sim_ts_clean.empty:
+            st.warning("No chart-ready data available for plotting.")
+        else:
+            health_line = (
+                alt.Chart(sim_ts_clean)
+                .mark_line(point=False, strokeWidth=2)
+                .encode(
+                    x=alt.X("date:T", title="Date"),
+                    y=alt.Y("health_index:Q", title="Health Index", scale=alt.Scale(domain=[0, 100])),
+                    color=alt.value("#1f77b4"),
+                    tooltip=["date:T", "health_index:Q", "operating_mode:N"],
+                )
             )
-        )
-        fit_line = (
-            alt.Chart(sim_ts)
-            .mark_line(strokeDash=[8, 5], strokeWidth=2, color="#2ca02c")
-            .encode(
-                x="date:T",
-                y=alt.Y("health_quad_fit:Q", title="Health Index"),
-                tooltip=["date:T", alt.Tooltip("health_quad_fit:Q", title="Quadratic Fit")],
+            fit_line = (
+                alt.Chart(sim_ts_clean)
+                .mark_line(strokeDash=[8, 5], strokeWidth=2, color="#2ca02c")
+                .encode(
+                    x="date:T",
+                    y=alt.Y("health_quad_fit:Q", title="Health Index"),
+                    tooltip=["date:T", alt.Tooltip("health_quad_fit:Q", title="Quadratic Fit")],
+                )
             )
-        )
-        threshold_line = alt.Chart(pd.DataFrame({"y": [threshold]})).mark_rule(color="red", strokeDash=[6, 5]).encode(y="y:Q")
-        st.altair_chart((health_line + fit_line + threshold_line).properties(height=340).interactive(), use_container_width=True)
+            threshold_line = (
+                alt.Chart(sanitize_chart_df(pd.DataFrame({"y": [threshold]}), ["y"]))
+                .mark_rule(color="red", strokeDash=[6, 5])
+                .encode(y="y:Q")
+            )
+            st.altair_chart((health_line + fit_line + threshold_line).properties(height=340).interactive(), use_container_width=True)
 
-        anomaly = (
-            alt.Chart(sim_ts)
-            .mark_area(opacity=0.35, color="#ff7f0e")
-            .encode(x="date:T", y=alt.Y("anomaly_score:Q", title="Anomaly Score"), tooltip=["date:T", "anomaly_score:Q"])
-            .properties(height=180)
-        )
-        st.altair_chart(anomaly, use_container_width=True)
+            anomaly = (
+                alt.Chart(sim_ts_clean)
+                .mark_area(opacity=0.35, color="#ff7f0e")
+                .encode(x="date:T", y=alt.Y("anomaly_score:Q", title="Anomaly Score"), tooltip=["date:T", "anomaly_score:Q"])
+                .properties(height=180)
+            )
+            st.altair_chart(anomaly, use_container_width=True)
 
         st.dataframe(
             sim_ts[["date", "operating_mode", "health_index", "health_quad_fit", "anomaly_score"]].tail(10).sort_values("date", ascending=False),
@@ -695,9 +725,10 @@ def main():
         st.info("頁面說明：比較 4 種處置策略在風險降低、停機、成本與殘餘風險上的綜合分數，給出推薦方案。")
 
         st.dataframe(options_df, use_container_width=True, hide_index=True)
+        options_df_chart = sanitize_chart_df(options_df, ["option", "decision_score", "residual_risk"])
 
         score_chart = (
-            alt.Chart(options_df)
+            alt.Chart(options_df_chart)
             .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
             .encode(
                 x=alt.X("decision_score:Q", title="Decision Score"),
@@ -709,7 +740,7 @@ def main():
         )
 
         residual_chart = (
-            alt.Chart(options_df)
+            alt.Chart(options_df_chart)
             .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
             .encode(
                 x=alt.X("residual_risk:Q", title="Residual Risk"),
@@ -723,7 +754,6 @@ def main():
         c_score, c_res = st.columns(2)
         c_score.altair_chart(score_chart, use_container_width=True)
         c_res.altair_chart(residual_chart, use_container_width=True)
-
 
         best = options_df.iloc[0]
         rec_light = traffic_light_text(float(best["residual_risk"]), green_threshold, yellow_threshold).split()[0]
@@ -760,8 +790,9 @@ def main():
                 ],
             }
         )
+        factors_df_chart = sanitize_chart_df(factors_df, ["factor", "value"])
         factor_chart = (
-            alt.Chart(factors_df)
+            alt.Chart(factors_df_chart)
             .mark_bar(cornerRadiusTopLeft=5, cornerRadiusTopRight=5)
             .encode(x="factor:N", y="value:Q", color="factor:N", tooltip=["factor", "value"])
             .properties(height=260)
