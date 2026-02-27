@@ -581,18 +581,21 @@ def main():
         top_n = st.slider("Top N assets by systemic priority", 5, len(priority_df), 10)
         top_df = priority_df.head(top_n)
         top_df_chart = sanitize_chart_df(top_df, ["systemic_priority", "asset_name"])
-        pr_chart = (
-            alt.Chart(top_df_chart)
-            .mark_bar(cornerRadiusTopLeft=5, cornerRadiusTopRight=5)
-            .encode(
-                x=alt.X("systemic_priority:Q", title="Systemic Priority"),
-                y=alt.Y("asset_name:N", sort="-x", title="Asset"),
-                color=alt.Color("systemic_priority:Q", title="Priority", scale=alt.Scale(scheme="redyellowgreen", reverse=True)),
-                tooltip=["asset_name", "out_degree", "betweenness", "systemic_priority"],
+        if top_df_chart.empty:
+            st.warning("No valid systemic-priority data available for chart rendering.")
+        else:
+            pr_chart = (
+                alt.Chart(top_df_chart)
+                .mark_bar(cornerRadiusTopLeft=5, cornerRadiusTopRight=5)
+                .encode(
+                    x=alt.X("systemic_priority:Q", title="Systemic Priority"),
+                    y=alt.Y("asset_name:N", sort="-x", title="Asset"),
+                    color=alt.Color("systemic_priority:Q", title="Priority", scale=alt.Scale(scheme="redyellowgreen", reverse=True)),
+                    tooltip=["asset_name", "out_degree", "betweenness", "systemic_priority"],
+                )
+                .properties(height=300)
             )
-            .properties(height=300)
-        )
-        st.altair_chart(pr_chart, use_container_width=True)
+            st.altair_chart(pr_chart, use_container_width=True)
 
         layout_df = build_layout_positions(assets_df).merge(
             model_df[["asset_id", "risk_score", "asset_name", "subsystem"]], on=["asset_id", "asset_name", "subsystem"], how="left"
@@ -648,7 +651,10 @@ def main():
             .encode(x="x:Q", y="y:Q", text="asset_id:N")
         )
 
-        st.altair_chart((edges_chart + nodes_chart + labels).properties(height=460), use_container_width=True)
+        if edges_df.empty or layout_df_chart.empty:
+            st.warning("No valid layout/cascade data available for chart rendering.")
+        else:
+            st.altair_chart((edges_chart + nodes_chart + labels).properties(height=460), use_container_width=True)
 
         impact_table = layout_df[layout_df["impact_strength"] > 0][["asset_id", "asset_name", "subsystem", "impact_strength", "risk_score"]].sort_values("impact_strength", ascending=False)
         st.markdown("**Cascade Impact Ranking (from selected asset)**")
