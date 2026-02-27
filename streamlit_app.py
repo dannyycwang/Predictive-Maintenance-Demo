@@ -1,5 +1,6 @@
 import json
 from datetime import datetime, timedelta
+from urllib import request, error
 
 import altair as alt
 import networkx as nx
@@ -324,6 +325,48 @@ def mock_mistral_5w(user_text: str, asset_name: str, subsystem: str) -> dict:
     }
 
 
+def call_local_mistral_5w(user_text: str, asset_name: str, subsystem: str, endpoint: str = "http://localhost:11434/api/generate", model: str = "mistral"):
+    """Call a local Mistral-compatible endpoint (e.g., Ollama) to standardize 5W."""
+    prompt = (
+        "You are a maintenance assistant. Convert the user note into strict 5W fields. "
+        "Return ONLY valid JSON with keys: what, when, where, who, why, standardized_5w. "
+        f"Asset: {asset_name} | Subsystem: {subsystem}. User note: {user_text}"
+    )
+    payload = {
+        "model": model,
+        "prompt": prompt,
+        "stream": False,
+        "format": "json",
+    }
+
+    req = request.Request(
+        endpoint,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    try:
+        with request.urlopen(req, timeout=12) as resp:
+            raw = resp.read().decode("utf-8")
+        outer = json.loads(raw)
+        text = outer.get("response", "{}")
+        parsed = json.loads(text)
+
+        out = {
+            "what": str(parsed.get("what", "N/A")),
+            "when": str(parsed.get("when", "N/A")),
+            "where": str(parsed.get("where", f"{asset_name} ({subsystem})")),
+            "who": str(parsed.get("who", "Field Operator")),
+            "why": str(parsed.get("why", "N/A")),
+            "standardized_5w": str(parsed.get("standardized_5w", "N/A")),
+            "llm_model": f"{model} (local)",
+        }
+        return True, out, ""
+    except (error.URLError, TimeoutError, json.JSONDecodeError, error.HTTPError, ValueError) as ex:
+        return False, {}, str(ex)
+
+
 def compute_risk_score(systemic_priority_norm: float, current_health: float, anomaly_score: float):
     """Risk formula required by the demo specification."""
     anomaly_n = float(np.clip(anomaly_score / 5.0, 0, 1))
@@ -534,6 +577,12 @@ def main():
     planned_windows = [(datetime.now().date() + timedelta(days=d)).isoformat() for d in (7, 14, 21, 28, 42)]
     planned_window = st.sidebar.selectbox("Planned Window (Option C)", planned_windows)
 
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("LLM Runtime")
+    use_local_mistral = st.sidebar.toggle("Use local Mistral (Ollama)", value=False)
+    local_mistral_model = st.sidebar.text_input("Local model", value="mistral")
+    local_mistral_endpoint = st.sidebar.text_input("Local endpoint", value="http://localhost:11434/api/generate")
+
     options_df = evaluate_options(
         selected_asset,
         risk_score,
@@ -679,19 +728,34 @@ def main():
         if audio is not None:
             st.success("已收到音訊檔（語音輸入成功）。")
 
-        if st.button("送出給 Mistral（mock）進行 5W 標準化", type="primary"):
-            result_5w = mock_mistral_5w(st.session_state.get("notif_assist_text", ""), selected_name, selected_asset["subsystem"])
+        if st.button("送出進行 5W 標準化", type="primary"):
+            user_note = st.session_state.get("notif_assist_text", "")
+            if use_local_mistral:
+                ok, result_5w, err = call_local_mistral_5w(
+                    user_note,
+                    selected_name,
+                    selected_asset["subsystem"],
+                    endpoint=local_mistral_endpoint,
+                    model=local_mistral_model,
+                )
+                if not ok:
+                    st.warning(f"本機 Mistral 呼叫失敗，改用 mock 流程。原因: {err}")
+                    result_5w = mock_mistral_5w(user_note, selected_name, selected_asset["subsystem"])
+            else:
+                result_5w = mock_mistral_5w(user_note, selected_name, selected_asset["subsystem"])
+
             st.markdown("#### 標準化 5W 結果")
             st.json(result_5w)
             fivew_df = pd.DataFrame(
                 {
-                    "item": ["WHAT", "WHEN", "WHERE", "WHO", "WHY"],
+                    "item": ["WHAT", "WHEN", "WHERE", "WHO", "WHY", "MODEL"],
                     "content": [
                         str(result_5w["what"]),
                         str(result_5w["when"]),
                         str(result_5w["where"]),
                         str(result_5w["who"]),
                         str(result_5w["why"]),
+                        str(result_5w.get("llm_model", "mock")),
                     ],
                 }
             )
