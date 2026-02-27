@@ -1,0 +1,6 @@
+streamlit
+networkx
+pandas
+numpy
+matplotlib
+altair
