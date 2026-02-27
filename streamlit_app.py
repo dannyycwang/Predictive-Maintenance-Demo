@@ -660,6 +660,7 @@ def main():
 
         st.dataframe(options_df, use_container_width=True, hide_index=True)
 
+<<<<<<< codex/build-streamlit-app-for-oracle-concept-fabvrs
         score_chart = (
             alt.Chart(options_df)
             .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
@@ -687,6 +688,22 @@ def main():
         c_score, c_res = st.columns(2)
         c_score.altair_chart(score_chart, use_container_width=True)
         c_res.altair_chart(residual_chart, use_container_width=True)
+=======
+        melted = options_df.melt(id_vars=["option"], value_vars=["decision_score", "residual_risk"], var_name="metric", value_name="value")
+        bars = (
+            alt.Chart(melted)
+            .mark_bar()
+            .encode(
+                x=alt.X("option:N", title="Intervention Option"),
+                y=alt.Y("value:Q", title="Score / Risk"),
+                color=alt.Color("metric:N", title="Metric"),
+                xOffset="metric:N",
+                tooltip=["option", "metric", "value"],
+            )
+            .properties(height=320)
+        )
+        st.altair_chart(bars, use_container_width=True)
+>>>>>>> main
 
         best = options_df.iloc[0]
         rec_light = traffic_light_text(float(best["residual_risk"]), green_threshold, yellow_threshold).split()[0]
