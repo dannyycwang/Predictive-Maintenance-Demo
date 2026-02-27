@@ -724,6 +724,7 @@ def main():
         c_score.altair_chart(score_chart, use_container_width=True)
         c_res.altair_chart(residual_chart, use_container_width=True)
 
+
         best = options_df.iloc[0]
         rec_light = traffic_light_text(float(best["residual_risk"]), green_threshold, yellow_threshold).split()[0]
         st.success(f"Recommended Option: {best['option']} {rec_light} · Decision Score {best['decision_score']}")
