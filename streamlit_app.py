@@ -621,42 +621,42 @@ def main():
         layout_df["selected"] = np.where(layout_df["asset_id"] == selected_asset["asset_id"], "Selected", "Other")
         layout_df_chart = sanitize_chart_df(layout_df, ["x", "y", "risk_score", "impact_strength", "asset_id"])
 
-        edges_chart = (
-            alt.Chart(edges_df)
-            .mark_rule(opacity=0.9)
-            .encode(
-                x="x:Q", y="y:Q", x2="x2:Q", y2="y2:Q",
-                strokeWidth=alt.StrokeWidth("impact_strength:Q", scale=alt.Scale(domain=[0, 1], range=[0.8, 6]), title="Cascade Strength"),
-                color=alt.Color("impact_strength:Q", scale=alt.Scale(scheme="orangered"), title="Cascade Strength"),
-                tooltip=["from:N", "to:N", "weight:Q", "impact_strength:Q"],
-            )
-        )
-
-        nodes_chart = (
-            alt.Chart(layout_df_chart)
-            .mark_circle(stroke="white", strokeWidth=1.2)
-            .encode(
-                x=alt.X("x:Q", axis=None),
-                y=alt.Y("y:Q", axis=None),
-                size=alt.Size("risk_score:Q", scale=alt.Scale(range=[120, 1000]), title="Risk Score"),
-                color=alt.Color("impact_strength:Q", scale=alt.Scale(scheme="yelloworangered"), title="Impact from Selected"),
-                shape=alt.Shape("subsystem:N", title="Subsystem"),
-                tooltip=["asset_name:N", "subsystem:N", "risk_score:Q", "impact_strength:Q"],
-            )
-        )
-
-        labels = (
-            alt.Chart(layout_df_chart)
-            .mark_text(dy=-12, fontSize=11)
-            .encode(x="x:Q", y="y:Q", text="asset_id:N")
-        )
-
-        if edges_df.empty or layout_df_chart.empty:
-            st.warning("No valid layout/cascade data available for chart rendering.")
-        else:
-            st.altair_chart((edges_chart + nodes_chart + labels).properties(height=460), use_container_width=True)
-
+        # Use simpler, robust charts to avoid Vega-Lite front-end crashes on some Streamlit bundles.
         impact_table = layout_df[layout_df["impact_strength"] > 0][["asset_id", "asset_name", "subsystem", "impact_strength", "risk_score"]].sort_values("impact_strength", ascending=False)
+        impact_chart_df = sanitize_chart_df(impact_table, ["asset_name", "impact_strength", "risk_score"])
+
+        if impact_chart_df.empty:
+            st.warning("No valid cascade-impact data available for chart rendering.")
+        else:
+            impact_bar = (
+                alt.Chart(impact_chart_df)
+                .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
+                .encode(
+                    x=alt.X("impact_strength:Q", title="Cascade Impact Strength"),
+                    y=alt.Y("asset_name:N", sort="-x", title="Downstream Asset"),
+                    color=alt.Color("risk_score:Q", title="Risk Score", scale=alt.Scale(scheme="yelloworangered")),
+                    tooltip=["asset_name", "subsystem", "impact_strength", "risk_score"],
+                )
+                .properties(height=340)
+            )
+            st.altair_chart(impact_bar, use_container_width=True)
+
+            layout_scatter_df = sanitize_chart_df(layout_df_chart, ["x", "y", "asset_name", "risk_score", "subsystem"])
+            if not layout_scatter_df.empty:
+                layout_scatter = (
+                    alt.Chart(layout_scatter_df)
+                    .mark_circle(stroke="white", strokeWidth=1)
+                    .encode(
+                        x=alt.X("x:Q", title="Facility Zone X"),
+                        y=alt.Y("y:Q", title="Facility Zone Y"),
+                        size=alt.Size("risk_score:Q", scale=alt.Scale(range=[100, 900]), title="Risk Score"),
+                        color=alt.Color("subsystem:N", title="Subsystem"),
+                        tooltip=["asset_name", "asset_id", "subsystem", "risk_score", "impact_strength"],
+                    )
+                    .properties(height=280)
+                )
+                st.altair_chart(layout_scatter, use_container_width=True)
+
         st.markdown("**Cascade Impact Ranking (from selected asset)**")
         with st.expander("查看 cascade ranking 與 adjacency", expanded=False):
             st.dataframe(impact_table, use_container_width=True, hide_index=True)
