@@ -260,6 +260,70 @@ def parse_notification(text: str, selected_asset: pd.Series) -> dict:
     }
 
 
+def notification_templates(subsystem: str):
+    """Common operator phrases to improve key-in quality."""
+    base = [
+        "High vibration noticed during high load; noise increased near bearing housing.",
+        "Temperature trend rising steadily over last shift; check cooling path.",
+        "Pressure fluctuation observed during start-stop cycle; possible control instability.",
+        "Intermittent leak observed near flange area; leak rate appears to increase under load.",
+    ]
+    if subsystem == "Electrical":
+        base = [
+            "Transformer temperature alarm intermittently triggered under peak loading.",
+            "Switchgear compartment showing abnormal hot spot and occasional noise.",
+            "Winding or insulation degradation suspected after repeated thermal excursions.",
+        ] + base[:2]
+    elif subsystem == "Rotating":
+        base = [
+            "Vibration and tonal noise increased during high load operation.",
+            "Bearing temperature rise with possible lubrication degradation symptoms.",
+            "Start-stop cycles causing unstable vibration baseline and transient spikes.",
+        ] + base[:2]
+    return base[:5]
+
+
+def mock_mistral_5w(user_text: str, asset_name: str, subsystem: str) -> dict:
+    """Offline mock of Mistral post-processing into standardized 5W maintenance note."""
+    txt = (user_text or "").strip()
+    text_l = txt.lower()
+
+    what = "Abnormal condition reported"
+    if "vibration" in text_l:
+        what = "Abnormal vibration trend"
+    elif "temperature" in text_l:
+        what = "Abnormal temperature increase"
+    elif "pressure" in text_l:
+        what = "Pressure instability"
+    elif "leak" in text_l:
+        what = "Leakage observed"
+
+    when = "During latest operating shift"
+    if "start" in text_l or "start-stop" in text_l:
+        when = "During start-stop transition"
+    elif "high load" in text_l:
+        when = "During high-load operation"
+
+    where = f"{asset_name} ({subsystem})"
+    who = "Field Operator"
+    why = "Potential degradation requiring early inspection to avoid cascading impact"
+
+    standardized = (
+        f"[WHAT] {what}. [WHEN] {when}. [WHERE] {where}. "
+        f"[WHO] {who}. [WHY] {why}. Source note: {txt or 'N/A'}"
+    )
+
+    return {
+        "what": what,
+        "when": when,
+        "where": where,
+        "who": who,
+        "why": why,
+        "standardized_5w": standardized,
+        "llm_model": "Mistral (mock offline prompt)",
+    }
+
+
 def compute_risk_score(systemic_priority_norm: float, current_health: float, anomaly_score: float):
     """Risk formula required by the demo specification."""
     anomaly_n = float(np.clip(anomaly_score / 5.0, 0, 1))
@@ -508,6 +572,7 @@ def main():
 
     tabs = st.tabs([
         "Overview",
+        "Notification Assist (5W)",
         "Asset Risk Graph",
         "Health & PdM Signals",
         "Decision Orchestration",
@@ -566,6 +631,68 @@ def main():
             )
 
     with tabs[1]:
+        st.subheader("Notification Assist (5W)")
+        st.info("頁面說明：協助工人快速輸入有重點的故障描述。先點常見句型，再交由 Mistral（mock）標準化成 5W。")
+
+        templates = notification_templates(selected_asset["subsystem"])
+        st.markdown("**常見故障描述推薦（點選可填入）**")
+        temp_cols = st.columns(2)
+        if "notif_assist_text" not in st.session_state:
+            st.session_state["notif_assist_text"] = ""
+
+        for i, t in enumerate(templates):
+            if temp_cols[i % 2].button(f"+ {t}", key=f"tpl_{i}"):
+                current = st.session_state.get("notif_assist_text", "")
+                st.session_state["notif_assist_text"] = (current + " " + t).strip()
+
+        draft_text = st.text_area(
+            "Notification Draft",
+            value=st.session_state.get("notif_assist_text", ""),
+            height=170,
+            key="notif_assist_editor",
+            help="可編輯推薦文字，送出後產生標準化 5W。",
+        )
+        st.session_state["notif_assist_text"] = draft_text
+
+        st.markdown("**語音輸入（Beta）**")
+        st.caption("可錄音上傳；在無離線 STT 引擎條件下，請於下方輸入語音轉寫文字（或使用模擬轉寫）。")
+        audio = st.audio_input("按下開始錄音")
+        voice_transcript = st.text_input("語音轉寫文字", value="", key="voice_transcript_text")
+        c_voice1, c_voice2 = st.columns(2)
+        if c_voice1.button("使用語音轉寫覆蓋草稿"):
+            if voice_transcript.strip():
+                st.session_state["notif_assist_text"] = voice_transcript.strip()
+                st.rerun()
+            else:
+                st.warning("請先輸入語音轉寫文字。")
+        if c_voice2.button("使用模擬轉寫"):
+            mock_text = f"Operator voice note: vibration increased on {selected_name} during high load, please inspect soon."
+            st.session_state["notif_assist_text"] = mock_text
+            st.rerun()
+
+        if audio is not None:
+            st.success("已收到音訊檔（語音輸入成功）。")
+
+        if st.button("送出給 Mistral（mock）進行 5W 標準化", type="primary"):
+            result_5w = mock_mistral_5w(st.session_state.get("notif_assist_text", ""), selected_name, selected_asset["subsystem"])
+            st.markdown("#### 標準化 5W 結果")
+            st.json(result_5w)
+            fivew_df = pd.DataFrame(
+                {
+                    "item": ["WHAT", "WHEN", "WHERE", "WHO", "WHY"],
+                    "content": [
+                        str(result_5w["what"]),
+                        str(result_5w["when"]),
+                        str(result_5w["where"]),
+                        str(result_5w["who"]),
+                        str(result_5w["why"]),
+                    ],
+                }
+            )
+            st.dataframe(fivew_df, use_container_width=True, hide_index=True)
+            st.code(result_5w["standardized_5w"], language="text")
+
+    with tabs[2]:
         st.subheader("Asset Risk Graph")
         st.info("頁面說明：先看廠務 layout 與各資產健康分數，再模擬單台健康下滑對下游影響台數的變化。")
 
@@ -689,7 +816,7 @@ def main():
             st.markdown("**Adjacency List (with propagation weights)**")
             st.code("\n".join(adjacency_lines), language="text")
 
-    with tabs[2]:
+    with tabs[3]:
         st.subheader("Health & PdM Signals")
         st.info("頁面說明：查看 90 天健康趨勢、異常分數和操作模式變化，輔助預估達到門檻的剩餘天數。")
         st.markdown(f"目前 **{selected_name}** 健康值最新為 **{latest_row['health_index']:.1f}**，最近一天變化 **{health_delta:+.2f}**；預估到達門檻剩餘 **{selected_asset['predicted_time_to_threshold']:.1f}** 天。")
@@ -758,7 +885,7 @@ def main():
                 hide_index=True,
             )
 
-    with tabs[3]:
+    with tabs[4]:
         st.subheader("Decision Orchestration")
         st.info("頁面說明：比較 4 種處置策略在風險降低、停機、成本與殘餘風險上的綜合分數，給出推薦方案。")
         st.markdown(f"依目前風險條件，建議策略傾向 **{options_df.iloc[0]['option']}**，可在成本與殘餘風險間取得較佳平衡。")
@@ -799,7 +926,7 @@ def main():
         rec_light = traffic_light_text(float(best["residual_risk"]), green_threshold, yellow_threshold).split()[0]
         st.success(f"Recommended Option: {best['option']} {rec_light} · Decision Score {best['decision_score']}")
 
-    with tabs[4]:
+    with tabs[5]:
         st.subheader("Standards (RAG) & Explainability")
         st.info("頁面說明：依資產與疑似故障型態擷取標準片段，並說明推薦決策與風險訊號之間的因果關聯。")
 
@@ -841,7 +968,7 @@ def main():
         )
         st.altair_chart(factor_chart, use_container_width=True)
 
-    with tabs[5]:
+    with tabs[6]:
         st.subheader("SAP Proposal Export")
         st.info("頁面說明：輸出可交給 planner 審核的工單提案 JSON，含通知結構化內容、風險與推薦方案。")
 
