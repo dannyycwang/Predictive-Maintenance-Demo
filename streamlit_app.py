@@ -559,7 +559,7 @@ def main():
             right.dataframe(
                 pd.DataFrame({
                     "field": list(parsed_notification.keys()),
-                    "value": [", ".join(v) if isinstance(v, list) else v for v in parsed_notification.values()],
+                    "value": [str(", ".join(v) if isinstance(v, list) else v) for v in parsed_notification.values()],
                 }),
                 use_container_width=True,
                 hide_index=True,
@@ -567,99 +567,125 @@ def main():
 
     with tabs[1]:
         st.subheader("Asset Risk Graph")
-        st.info("頁面說明：用依賴圖與廠務 layout 呈現選定資產的風險連動，顏色與線粗度代表影響強度。")
-        impact = cascade_impact(graph, selected_asset["asset_id"], cutoff=4)
+        st.info("頁面說明：先看廠務 layout 與各資產健康分數，再模擬單台健康下滑對下游影響台數的變化。")
 
-        st.markdown(f"目前選定 **{selected_name}**，可向下游連動 **{max(len(impact)-1, 0)}** 個資產；其系統性優先級為 **{selected_asset['systemic_priority']:.1f}**。")
-        with st.expander("查看 systemic priority 明細", expanded=False):
+        layout_df = build_layout_positions(assets_df).merge(
+            model_df[["asset_id", "asset_name", "subsystem", "risk_score", "current_health"]],
+            on=["asset_id", "asset_name", "subsystem"],
+            how="left",
+        )
+        layout_df = sanitize_chart_df(layout_df, ["x", "y", "asset_name", "current_health", "subsystem"])
+
+        st.markdown("#### Facility Layout（顯示當前健康分數）")
+        if layout_df.empty:
+            st.warning("No valid layout data available.")
+        else:
+            layout_chart = (
+                alt.Chart(layout_df)
+                .mark_circle(stroke="white", strokeWidth=1)
+                .encode(
+                    x=alt.X("x:Q", title="Facility Zone X"),
+                    y=alt.Y("y:Q", title="Facility Zone Y"),
+                    size=alt.Size("current_health:Q", scale=alt.Scale(range=[120, 950]), title="Current Health"),
+                    color=alt.Color("current_health:Q", title="Health Index", scale=alt.Scale(scheme="redyellowgreen")),
+                    shape=alt.Shape("subsystem:N", title="Subsystem"),
+                    tooltip=["asset_name", "asset_id", "subsystem", alt.Tooltip("current_health:Q", title="Health")],
+                )
+                .properties(height=330)
+            )
+            labels = (
+                alt.Chart(layout_df)
+                .mark_text(dy=-12, fontSize=11)
+                .encode(x="x:Q", y="y:Q", text=alt.Text("current_health:Q", format=".1f"))
+            )
+            st.altair_chart((layout_chart + labels), use_container_width=True)
+
+        st.markdown("#### Impact Simulator（點選資產 + 健康拉霸）")
+        sim_asset_name = st.selectbox(
+            "選擇資產（模擬點擊）",
+            model_df["asset_name"].tolist(),
+            index=int(model_df[model_df["asset_id"] == selected_asset["asset_id"]].index[0]),
+            key="impact_sim_asset",
+        )
+        sim_asset = model_df.loc[model_df["asset_name"] == sim_asset_name].iloc[0]
+        impact_base = cascade_impact(graph, sim_asset["asset_id"], cutoff=4)
+        base_impacted_count = max(len(impact_base) - 1, 0)
+
+        current_h = float(sim_asset["current_health"])
+        sim_health = st.slider(
+            "模擬健康分數（往下拉看影響變化）",
+            min_value=0.0,
+            max_value=100.0,
+            value=float(round(current_h, 1)),
+            step=0.1,
+            key="impact_health_slider",
+        )
+        health_ratio = 0.0 if current_h <= 0 else float(np.clip(sim_health / current_h, 0, 1.5))
+
+        impacted_sim = int(round(base_impacted_count * health_ratio))
+        impacted_sim = max(0, min(base_impacted_count, impacted_sim))
+
+        c_imp1, c_imp2, c_imp3 = st.columns(3)
+        c_imp1.metric("Base impacted assets", f"{base_impacted_count}")
+        c_imp2.metric("Simulated impacted assets", f"{impacted_sim}", delta=f"{impacted_sim - base_impacted_count:+d}")
+        c_imp3.metric("Simulated health", f"{sim_health:.1f}", delta=f"{sim_health - current_h:+.1f}")
+
+        st.markdown(
+            f"資產 **{sim_asset_name}** 目前健康 **{current_h:.1f}**。當健康下滑至 **{sim_health:.1f}** 時，"
+            f"預估可影響台數由 **{base_impacted_count}** 下降為 **{impacted_sim}**。"
+        )
+
+        impact_table = layout_df[["asset_id", "asset_name", "subsystem"]].copy()
+        impact_table["impact_strength_base"] = impact_table["asset_id"].map(impact_base).fillna(0.0)
+        impact_table = impact_table[impact_table["impact_strength_base"] > 0].copy()
+        impact_table["impact_strength_simulated"] = impact_table["impact_strength_base"] * health_ratio
+        impact_table["risk_score"] = impact_table["asset_id"].map(model_df.set_index("asset_id")["risk_score"]).fillna(0.0)
+        impact_table = impact_table.sort_values("impact_strength_simulated", ascending=False)
+
+        impact_chart_df = sanitize_chart_df(
+            impact_table,
+            ["asset_name", "impact_strength_simulated", "impact_strength_base"],
+        )
+
+        if impact_chart_df.empty:
+            st.warning("No valid cascade-impact data available for this asset.")
+        else:
+            comp = impact_chart_df.melt(
+                id_vars=["asset_name"],
+                value_vars=["impact_strength_base", "impact_strength_simulated"],
+                var_name="scenario",
+                value_name="strength",
+            )
+            comp["scenario"] = comp["scenario"].map(
+                {
+                    "impact_strength_base": "Base",
+                    "impact_strength_simulated": "Simulated",
+                }
+            )
+            impact_compare = (
+                alt.Chart(comp)
+                .mark_bar()
+                .encode(
+                    x=alt.X("strength:Q", title="Cascade Impact Strength"),
+                    y=alt.Y("asset_name:N", sort="-x", title="Downstream Asset"),
+                    color=alt.Color("scenario:N", title="Scenario"),
+                    tooltip=["asset_name", "scenario", "strength"],
+                )
+                .properties(height=320)
+            )
+            st.altair_chart(impact_compare, use_container_width=True)
+
+        with st.expander("查看 systemic priority 與 adjacency 詳細資料", expanded=False):
             st.dataframe(
                 priority_df[["asset_id", "asset_name", "out_degree", "betweenness", "systemic_priority"]],
                 use_container_width=True,
                 hide_index=True,
             )
-
-        top_n = st.slider("Top N assets by systemic priority", 5, len(priority_df), 10)
-        top_df = priority_df.head(top_n)
-        top_df_chart = sanitize_chart_df(top_df, ["systemic_priority", "asset_name"])
-        if top_df_chart.empty:
-            st.warning("No valid systemic-priority data available for chart rendering.")
-        else:
-            pr_chart = (
-                alt.Chart(top_df_chart)
-                .mark_bar(cornerRadiusTopLeft=5, cornerRadiusTopRight=5)
-                .encode(
-                    x=alt.X("systemic_priority:Q", title="Systemic Priority"),
-                    y=alt.Y("asset_name:N", sort="-x", title="Asset"),
-                    color=alt.Color("systemic_priority:Q", title="Priority", scale=alt.Scale(scheme="redyellowgreen", reverse=True)),
-                    tooltip=["asset_name", "out_degree", "betweenness", "systemic_priority"],
-                )
-                .properties(height=300)
+            st.dataframe(
+                impact_table[["asset_id", "asset_name", "subsystem", "impact_strength_base", "impact_strength_simulated"]],
+                use_container_width=True,
+                hide_index=True,
             )
-            st.altair_chart(pr_chart, use_container_width=True)
-
-        layout_df = build_layout_positions(assets_df).merge(
-            model_df[["asset_id", "risk_score", "asset_name", "subsystem"]], on=["asset_id", "asset_name", "subsystem"], how="left"
-        )
-        edge_rows = []
-        for u, v, d in graph.edges(data=True):
-            src = layout_df[layout_df["asset_id"] == u].iloc[0]
-            dst = layout_df[layout_df["asset_id"] == v].iloc[0]
-            impacted = v in impact and u in impact
-            chain_strength = min(impact.get(u, 0), impact.get(v, 0)) if impacted else 0
-            edge_rows.append(
-                {
-                    "x": src["x"], "y": src["y"], "x2": dst["x"], "y2": dst["y"],
-                    "weight": d["propagation_weight"],
-                    "impact_strength": round(chain_strength, 3),
-                    "highlight": "Linked" if impacted else "Background",
-                    "from": u, "to": v,
-                }
-            )
-        edges_df = sanitize_chart_df(pd.DataFrame(edge_rows), ["x", "y", "x2", "y2", "impact_strength"])
-
-        layout_df["impact_strength"] = layout_df["asset_id"].map(impact).fillna(0)
-        layout_df["selected"] = np.where(layout_df["asset_id"] == selected_asset["asset_id"], "Selected", "Other")
-        layout_df_chart = sanitize_chart_df(layout_df, ["x", "y", "risk_score", "impact_strength", "asset_id"])
-
-        # Use simpler, robust charts to avoid Vega-Lite front-end crashes on some Streamlit bundles.
-        impact_table = layout_df[layout_df["impact_strength"] > 0][["asset_id", "asset_name", "subsystem", "impact_strength", "risk_score"]].sort_values("impact_strength", ascending=False)
-        impact_chart_df = sanitize_chart_df(impact_table, ["asset_name", "impact_strength", "risk_score"])
-
-        if impact_chart_df.empty:
-            st.warning("No valid cascade-impact data available for chart rendering.")
-        else:
-            impact_bar = (
-                alt.Chart(impact_chart_df)
-                .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
-                .encode(
-                    x=alt.X("impact_strength:Q", title="Cascade Impact Strength"),
-                    y=alt.Y("asset_name:N", sort="-x", title="Downstream Asset"),
-                    color=alt.Color("risk_score:Q", title="Risk Score", scale=alt.Scale(scheme="yelloworangered")),
-                    tooltip=["asset_name", "subsystem", "impact_strength", "risk_score"],
-                )
-                .properties(height=340)
-            )
-            st.altair_chart(impact_bar, use_container_width=True)
-
-            layout_scatter_df = sanitize_chart_df(layout_df_chart, ["x", "y", "asset_name", "risk_score", "subsystem"])
-            if not layout_scatter_df.empty:
-                layout_scatter = (
-                    alt.Chart(layout_scatter_df)
-                    .mark_circle(stroke="white", strokeWidth=1)
-                    .encode(
-                        x=alt.X("x:Q", title="Facility Zone X"),
-                        y=alt.Y("y:Q", title="Facility Zone Y"),
-                        size=alt.Size("risk_score:Q", scale=alt.Scale(range=[100, 900]), title="Risk Score"),
-                        color=alt.Color("subsystem:N", title="Subsystem"),
-                        tooltip=["asset_name", "asset_id", "subsystem", "risk_score", "impact_strength"],
-                    )
-                    .properties(height=280)
-                )
-                st.altair_chart(layout_scatter, use_container_width=True)
-
-        st.markdown("**Cascade Impact Ranking (from selected asset)**")
-        with st.expander("查看 cascade ranking 與 adjacency", expanded=False):
-            st.dataframe(impact_table, use_container_width=True, hide_index=True)
             st.markdown("**Adjacency List (with propagation weights)**")
             st.code("\n".join(adjacency_lines), language="text")
 
@@ -834,9 +860,9 @@ def main():
                     "predicted_time_to_threshold", "recommended_option", "planner_approval_required",
                 ],
                 "value": [
-                    sap_payload["asset_id"], sap_payload["asset_name"], sap_payload["risk_score"],
-                    sap_payload["traffic_light_status"], sap_payload["predicted_time_to_threshold"],
-                    sap_payload["recommended_option"]["option"], sap_payload["planner_approval_required"],
+                    str(sap_payload["asset_id"]), str(sap_payload["asset_name"]), str(sap_payload["risk_score"]),
+                    str(sap_payload["traffic_light_status"]), str(sap_payload["predicted_time_to_threshold"]),
+                    str(sap_payload["recommended_option"]["option"]), str(sap_payload["planner_approval_required"]),
                 ],
             }
         )
