@@ -480,14 +480,31 @@ def main():
     c1.markdown(f"**Selected Asset Status:** {selected_status}")
     c2.markdown(f"**Facility Status:** {facility_status}")
 
-    kpi = st.columns(5)
-    kpi[0].metric("Current Health Index", f"{selected_asset['current_health']:.1f}")
-    kpi[1].metric("Risk Score", f"{risk_score:.1f}")
-    kpi[2].metric("Predicted Time-to-Threshold (days)", f"{selected_asset['predicted_time_to_threshold']:.1f}")
-    kpi[3].metric("Estimated Mobilization Cost", f"${selected_asset['mobilization_cost']:,.0f}")
-    kpi[4].metric("Estimated Risk Reduction (mock)", f"{min(95, 35 + selected_asset['criticality'] * 5):.0f}%")
+    selected_ts_kpi = ts_df[ts_df["asset_id"] == selected_asset["asset_id"]].sort_values("date").reset_index(drop=True)
+    latest_row = selected_ts_kpi.iloc[-1]
+    prev_row = selected_ts_kpi.iloc[-2] if len(selected_ts_kpi) > 1 else latest_row
+    health_delta = float(latest_row["health_index"] - prev_row["health_index"])
+    anomaly_delta = float(latest_row["anomaly_score"] - prev_row["anomaly_score"])
+    risk_latest, _ = compute_risk_score(
+        float(selected_asset["systemic_priority_normalized"]),
+        float(latest_row["health_index"]),
+        float(latest_row["anomaly_score"]),
+    )
+    risk_prev, _ = compute_risk_score(
+        float(selected_asset["systemic_priority_normalized"]),
+        float(prev_row["health_index"]),
+        float(prev_row["anomaly_score"]),
+    )
+    risk_delta = float(risk_latest - risk_prev)
 
-    st.caption("Risk formula: risk_score = (systemic_priority_normalized*0.5 + (100-current_health)/100*0.3 + anomaly_score_normalized*0.2) * 100")
+    kpi = st.columns(5)
+    kpi[0].metric("Current Health Index", f"{latest_row['health_index']:.1f}", delta=f"{health_delta:+.2f}")
+    kpi[1].metric("Risk Score", f"{risk_latest:.1f}", delta=f"{risk_delta:+.2f}")
+    kpi[2].metric("Predicted Time-to-Threshold (days)", f"{selected_asset['predicted_time_to_threshold']:.1f}")
+    kpi[3].metric("Anomaly Score", f"{latest_row['anomaly_score']:.2f}", delta=f"{anomaly_delta:+.2f}")
+    kpi[4].metric("Estimated Mobilization Cost", f"${selected_asset['mobilization_cost']:,.0f}")
+
+    st.caption("Summary 使用最新一筆資料；Delta = 最新值 - 倒數第二筆。Risk formula: risk_score = (systemic_priority_normalized*0.5 + (100-current_health)/100*0.3 + anomaly_score_normalized*0.2) * 100")
 
     tabs = st.tabs([
         "Overview",
@@ -624,24 +641,43 @@ def main():
         st.subheader("Health & PdM Signals")
         st.info("頁面說明：查看 90 天健康趨勢、異常分數和操作模式變化，輔助預估達到門檻的剩餘天數。")
 
-        asset_ts = ts_df[ts_df["asset_id"] == selected_asset["asset_id"]].copy()
+        asset_ts = ts_df[ts_df["asset_id"] == selected_asset["asset_id"]].sort_values("date").reset_index(drop=True).copy()
         threshold = 60
-        line = (
-            alt.Chart(asset_ts)
-            .mark_line(point=False)
+
+        st.caption("可用滑桿模擬時間推進，觀察單一機台健康值下降速度；虛線為二次擬合趨勢。")
+        sim_day = st.slider("Simulation Day (time progression)", min_value=15, max_value=len(asset_ts), value=len(asset_ts), step=1)
+        sim_ts = asset_ts.iloc[:sim_day].copy()
+        sim_ts["t_idx"] = np.arange(len(sim_ts))
+        if len(sim_ts) >= 3:
+            coef = np.polyfit(sim_ts["t_idx"], sim_ts["health_index"], 2)
+            sim_ts["health_quad_fit"] = np.polyval(coef, sim_ts["t_idx"])
+        else:
+            sim_ts["health_quad_fit"] = sim_ts["health_index"]
+
+        health_line = (
+            alt.Chart(sim_ts)
+            .mark_line(point=False, strokeWidth=2)
             .encode(
                 x=alt.X("date:T", title="Date"),
                 y=alt.Y("health_index:Q", title="Health Index", scale=alt.Scale(domain=[0, 100])),
-                color=alt.Color("operating_mode:N", title="Operating Mode"),
+                color=alt.value("#1f77b4"),
                 tooltip=["date:T", "health_index:Q", "operating_mode:N"],
             )
-            .properties(height=320)
+        )
+        fit_line = (
+            alt.Chart(sim_ts)
+            .mark_line(strokeDash=[8, 5], strokeWidth=2, color="#2ca02c")
+            .encode(
+                x="date:T",
+                y=alt.Y("health_quad_fit:Q", title="Health Index"),
+                tooltip=["date:T", alt.Tooltip("health_quad_fit:Q", title="Quadratic Fit")],
+            )
         )
         threshold_line = alt.Chart(pd.DataFrame({"y": [threshold]})).mark_rule(color="red", strokeDash=[6, 5]).encode(y="y:Q")
-        st.altair_chart((line + threshold_line).interactive(), use_container_width=True)
+        st.altair_chart((health_line + fit_line + threshold_line).properties(height=340).interactive(), use_container_width=True)
 
         anomaly = (
-            alt.Chart(asset_ts)
+            alt.Chart(sim_ts)
             .mark_area(opacity=0.35, color="#ff7f0e")
             .encode(x="date:T", y=alt.Y("anomaly_score:Q", title="Anomaly Score"), tooltip=["date:T", "anomaly_score:Q"])
             .properties(height=180)
@@ -649,7 +685,7 @@ def main():
         st.altair_chart(anomaly, use_container_width=True)
 
         st.dataframe(
-            asset_ts[["date", "operating_mode", "health_index", "anomaly_score"]].tail(10).sort_values("date", ascending=False),
+            sim_ts[["date", "operating_mode", "health_index", "health_quad_fit", "anomaly_score"]].tail(10).sort_values("date", ascending=False),
             use_container_width=True,
             hide_index=True,
         )
@@ -660,7 +696,6 @@ def main():
 
         st.dataframe(options_df, use_container_width=True, hide_index=True)
 
-<<<<<<< codex/build-streamlit-app-for-oracle-concept-fabvrs
         score_chart = (
             alt.Chart(options_df)
             .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
@@ -688,22 +723,7 @@ def main():
         c_score, c_res = st.columns(2)
         c_score.altair_chart(score_chart, use_container_width=True)
         c_res.altair_chart(residual_chart, use_container_width=True)
-=======
-        melted = options_df.melt(id_vars=["option"], value_vars=["decision_score", "residual_risk"], var_name="metric", value_name="value")
-        bars = (
-            alt.Chart(melted)
-            .mark_bar()
-            .encode(
-                x=alt.X("option:N", title="Intervention Option"),
-                y=alt.Y("value:Q", title="Score / Risk"),
-                color=alt.Color("metric:N", title="Metric"),
-                xOffset="metric:N",
-                tooltip=["option", "metric", "value"],
-            )
-            .properties(height=320)
-        )
-        st.altair_chart(bars, use_container_width=True)
->>>>>>> main
+
 
         best = options_df.iloc[0]
         rec_light = traffic_light_text(float(best["residual_risk"]), green_threshold, yellow_threshold).split()[0]
