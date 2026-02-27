@@ -488,11 +488,7 @@ def main():
         standards,
     )
 
-    st.markdown("---")
-    c1, c2 = st.columns(2)
-    c1.markdown(f"**Selected Asset Status:** {selected_status}")
-    c2.markdown(f"**Facility Status:** {facility_status}")
-
+    # Global KPI calculations (rendered in Overview only)
     selected_ts_kpi = ts_df[ts_df["asset_id"] == selected_asset["asset_id"]].sort_values("date").reset_index(drop=True)
     latest_row = selected_ts_kpi.iloc[-1]
     prev_row = selected_ts_kpi.iloc[-2] if len(selected_ts_kpi) > 1 else latest_row
@@ -510,15 +506,6 @@ def main():
     )
     risk_delta = float(risk_latest - risk_prev)
 
-    kpi = st.columns(5)
-    kpi[0].metric("Current Health Index", f"{latest_row['health_index']:.1f}", delta=f"{health_delta:+.2f}")
-    kpi[1].metric("Risk Score", f"{risk_latest:.1f}", delta=f"{risk_delta:+.2f}")
-    kpi[2].metric("Predicted Time-to-Threshold (days)", f"{selected_asset['predicted_time_to_threshold']:.1f}")
-    kpi[3].metric("Anomaly Score", f"{latest_row['anomaly_score']:.2f}", delta=f"{anomaly_delta:+.2f}")
-    kpi[4].metric("Estimated Mobilization Cost", f"${selected_asset['mobilization_cost']:,.0f}")
-
-    st.caption("Summary 使用最新一筆資料；Delta = 最新值 - 倒數第二筆。Risk formula: risk_score = (systemic_priority_normalized*0.5 + (100-current_health)/100*0.3 + anomaly_score_normalized*0.2) * 100")
-
     tabs = st.tabs([
         "Overview",
         "Asset Risk Graph",
@@ -532,10 +519,24 @@ def main():
         st.subheader("Overview")
         st.info("頁面說明：展示整體風險態勢、通知文字結構化結果，讓決策者先快速掌握目前資產狀態。")
 
+        st.markdown("---")
+        c1, c2 = st.columns(2)
+        c1.markdown(f"**Selected Asset Status:** {selected_status}")
+        c2.markdown(f"**Facility Status:** {facility_status}")
+
+        kpi = st.columns(5)
+        kpi[0].metric("Current Health Index", f"{latest_row['health_index']:.1f}", delta=f"{health_delta:+.2f}")
+        kpi[1].metric("Risk Score", f"{risk_latest:.1f}", delta=f"{risk_delta:+.2f}")
+        kpi[2].metric("Predicted Time-to-Threshold (days)", f"{selected_asset['predicted_time_to_threshold']:.1f}")
+        kpi[3].metric("Anomaly Score", f"{latest_row['anomaly_score']:.2f}", delta=f"{anomaly_delta:+.2f}")
+        kpi[4].metric("Estimated Mobilization Cost", f"${selected_asset['mobilization_cost']:,.0f}")
+        st.caption("Summary 使用最新一筆資料；Delta = 最新值 - 倒數第二筆。Risk formula: risk_score = (systemic_priority_normalized*0.5 + (100-current_health)/100*0.3 + anomaly_score_normalized*0.2) * 100")
+
         overview_cols = ["asset_id", "asset_name", "subsystem", "criticality", "current_health", "anomaly_score", "systemic_priority", "risk_score"]
         risk_rank = model_df[overview_cols].sort_values("risk_score", ascending=False)
         risk_rank_chart = sanitize_chart_df(risk_rank, ["risk_score", "asset_name"])
-        st.dataframe(risk_rank, use_container_width=True, hide_index=True)
+        with st.expander("查看明細資料表（Asset risk rank）", expanded=False):
+            st.dataframe(risk_rank, use_container_width=True, hide_index=True)
 
         chart = (
             alt.Chart(risk_rank_chart)
@@ -551,26 +552,31 @@ def main():
         st.altair_chart(chart, use_container_width=True)
 
         st.markdown("#### Notification Structuring")
-        left, right = st.columns(2)
-        left.json(parsed_notification)
-        right.dataframe(
-            pd.DataFrame({
-                "field": list(parsed_notification.keys()),
-                "value": [", ".join(v) if isinstance(v, list) else v for v in parsed_notification.values()],
-            }),
-            use_container_width=True,
-            hide_index=True,
-        )
+        st.markdown(f"系統判斷目前通知最可能是 **{parsed_notification['suspected_failure_type']}**，疑似位置為 **{parsed_notification['suspected_component']}**，置信度 **{parsed_notification['confidence']:.2f}**。")
+        with st.expander("查看通知結構化原始輸出", expanded=False):
+            left, right = st.columns(2)
+            left.json(parsed_notification)
+            right.dataframe(
+                pd.DataFrame({
+                    "field": list(parsed_notification.keys()),
+                    "value": [", ".join(v) if isinstance(v, list) else v for v in parsed_notification.values()],
+                }),
+                use_container_width=True,
+                hide_index=True,
+            )
 
     with tabs[1]:
         st.subheader("Asset Risk Graph")
         st.info("頁面說明：用依賴圖與廠務 layout 呈現選定資產的風險連動，顏色與線粗度代表影響強度。")
+        impact = cascade_impact(graph, selected_asset["asset_id"], cutoff=4)
 
-        st.dataframe(
-            priority_df[["asset_id", "asset_name", "out_degree", "betweenness", "systemic_priority"]],
-            use_container_width=True,
-            hide_index=True,
-        )
+        st.markdown(f"目前選定 **{selected_name}**，可向下游連動 **{max(len(impact)-1, 0)}** 個資產；其系統性優先級為 **{selected_asset['systemic_priority']:.1f}**。")
+        with st.expander("查看 systemic priority 明細", expanded=False):
+            st.dataframe(
+                priority_df[["asset_id", "asset_name", "out_degree", "betweenness", "systemic_priority"]],
+                use_container_width=True,
+                hide_index=True,
+            )
 
         top_n = st.slider("Top N assets by systemic priority", 5, len(priority_df), 10)
         top_df = priority_df.head(top_n)
@@ -591,8 +597,6 @@ def main():
         layout_df = build_layout_positions(assets_df).merge(
             model_df[["asset_id", "risk_score", "asset_name", "subsystem"]], on=["asset_id", "asset_name", "subsystem"], how="left"
         )
-        impact = cascade_impact(graph, selected_asset["asset_id"], cutoff=4)
-
         edge_rows = []
         for u, v, d in graph.edges(data=True):
             src = layout_df[layout_df["asset_id"] == u].iloc[0]
@@ -648,14 +652,15 @@ def main():
 
         impact_table = layout_df[layout_df["impact_strength"] > 0][["asset_id", "asset_name", "subsystem", "impact_strength", "risk_score"]].sort_values("impact_strength", ascending=False)
         st.markdown("**Cascade Impact Ranking (from selected asset)**")
-        st.dataframe(impact_table, use_container_width=True, hide_index=True)
-
-        st.markdown("**Adjacency List (with propagation weights)**")
-        st.code("\n".join(adjacency_lines), language="text")
+        with st.expander("查看 cascade ranking 與 adjacency", expanded=False):
+            st.dataframe(impact_table, use_container_width=True, hide_index=True)
+            st.markdown("**Adjacency List (with propagation weights)**")
+            st.code("\n".join(adjacency_lines), language="text")
 
     with tabs[2]:
         st.subheader("Health & PdM Signals")
         st.info("頁面說明：查看 90 天健康趨勢、異常分數和操作模式變化，輔助預估達到門檻的剩餘天數。")
+        st.markdown(f"目前 **{selected_name}** 健康值最新為 **{latest_row['health_index']:.1f}**，最近一天變化 **{health_delta:+.2f}**；預估到達門檻剩餘 **{selected_asset['predicted_time_to_threshold']:.1f}** 天。")
 
         asset_ts = ts_df[ts_df["asset_id"] == selected_asset["asset_id"]].sort_values("date").reset_index(drop=True).copy()
         asset_ts = sanitize_chart_df(asset_ts, ["date", "health_index", "anomaly_score"])
@@ -714,17 +719,20 @@ def main():
             )
             st.altair_chart(anomaly, use_container_width=True)
 
-        st.dataframe(
-            sim_ts[["date", "operating_mode", "health_index", "health_quad_fit", "anomaly_score"]].tail(10).sort_values("date", ascending=False),
-            use_container_width=True,
-            hide_index=True,
-        )
+        with st.expander("查看最近 10 筆健康訊號資料", expanded=False):
+            st.dataframe(
+                sim_ts[["date", "operating_mode", "health_index", "health_quad_fit", "anomaly_score"]].tail(10).sort_values("date", ascending=False),
+                use_container_width=True,
+                hide_index=True,
+            )
 
     with tabs[3]:
         st.subheader("Decision Orchestration")
         st.info("頁面說明：比較 4 種處置策略在風險降低、停機、成本與殘餘風險上的綜合分數，給出推薦方案。")
+        st.markdown(f"依目前風險條件，建議策略傾向 **{options_df.iloc[0]['option']}**，可在成本與殘餘風險間取得較佳平衡。")
 
-        st.dataframe(options_df, use_container_width=True, hide_index=True)
+        with st.expander("查看策略評分明細", expanded=False):
+            st.dataframe(options_df, use_container_width=True, hide_index=True)
         options_df_chart = sanitize_chart_df(options_df, ["option", "decision_score", "residual_risk"])
 
         score_chart = (
@@ -764,9 +772,11 @@ def main():
         st.info("頁面說明：依資產與疑似故障型態擷取標準片段，並說明推薦決策與風險訊號之間的因果關聯。")
 
         st.markdown("#### Cited Guidance")
-        for snip in standards:
-            st.markdown(f"**{snip['title']}**")
-            st.write(snip["excerpt"])
+        st.markdown("系統已根據子系統與故障假設自動挑選最相關的 1–2 條標準節錄。")
+        with st.expander("查看引用標準內容", expanded=False):
+            for snip in standards:
+                st.markdown(f"**{snip['title']}**")
+                st.write(snip["excerpt"])
 
         st.markdown("#### Explainability")
         explain = (
@@ -824,7 +834,8 @@ def main():
                 ],
             }
         )
-        st.dataframe(preview, use_container_width=True, hide_index=True)
+        with st.expander("查看 proposal key-value 明細", expanded=False):
+            st.dataframe(preview, use_container_width=True, hide_index=True)
 
 
 if __name__ == "__main__":
