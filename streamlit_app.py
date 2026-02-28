@@ -621,8 +621,23 @@ def main():
         f"Operator reports rising vibration and intermittent noise at {selected_name} during high load. "
         "Observed slight temperature increase and occasional pressure fluctuation."
     )
-    notification_text = st.sidebar.text_area("Free-text Notification", value=notification_default, height=140)
-    parsed_notification = parse_notification(notification_text, selected_asset)
+    if "main_notification_text" not in st.session_state:
+        st.session_state["main_notification_text"] = notification_default
+    if "notif_assist_text" not in st.session_state:
+        st.session_state["notif_assist_text"] = st.session_state["main_notification_text"]
+
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Active Notification (Pipeline Input)")
+    st.sidebar.caption("目前風險評分/標準檢索/SAP 匯出都會使用這段通知文字。請到 Notification Assist 分頁編輯。")
+    st.sidebar.text_area(
+        "Active Notification",
+        value=st.session_state["main_notification_text"],
+        height=120,
+        disabled=True,
+        key="active_notification_preview",
+    )
+
+    parsed_notification = parse_notification(st.session_state["main_notification_text"], selected_asset)
 
     defer_weeks = st.sidebar.slider("Weeks to defer (Option B)", 1, 12, 4)
     planned_windows = [(datetime.now().date() + timedelta(days=d)).isoformat() for d in (7, 14, 21, 28, 42)]
@@ -773,53 +788,69 @@ def main():
 
     with tabs[1]:
         st.subheader("Notification Assist (5W)")
-        st.info("頁面說明：協助工人快速輸入有重點的故障描述。先點常見句型，再交由 Mistral（mock）標準化成 5W。")
+        st.info("頁面說明：這裡是唯一的通知編輯入口。先用推薦句型快速組稿，再一鍵設為主流程通知。")
 
-        templates = notification_templates(selected_asset["subsystem"])
-        st.markdown("**常見故障描述推薦（點選可填入）**")
-        temp_cols = st.columns(2)
-        if "notif_assist_text" not in st.session_state:
-            st.session_state["notif_assist_text"] = ""
+        cstep1, cstep2 = st.columns([1.2, 1])
+        with cstep1:
+            st.markdown("#### Step 1 · 推薦句型")
+            templates = notification_templates(selected_asset["subsystem"])
+            temp_cols = st.columns(2)
+            for i, t in enumerate(templates):
+                if temp_cols[i % 2].button(f"+ {t}", key=f"tpl_{i}"):
+                    current = st.session_state.get("notif_assist_text", "")
+                    st.session_state["notif_assist_text"] = (current + " " + t).strip()
+                    st.rerun()
 
-        for i, t in enumerate(templates):
-            if temp_cols[i % 2].button(f"+ {t}", key=f"tpl_{i}"):
-                current = st.session_state.get("notif_assist_text", "")
-                st.session_state["notif_assist_text"] = (current + " " + t).strip()
+            st.markdown("#### Step 2 · 編輯 Draft")
+            draft_text = st.text_area(
+                "Notification Draft",
+                value=st.session_state.get("notif_assist_text", ""),
+                height=180,
+                key="notif_assist_editor",
+                help="這裡編輯後，按『設為主流程通知』才會影響其他分頁。",
+            )
+            st.session_state["notif_assist_text"] = draft_text
 
-        draft_text = st.text_area(
-            "Notification Draft",
-            value=st.session_state.get("notif_assist_text", ""),
-            height=170,
-            key="notif_assist_editor",
-            help="可編輯推薦文字，送出後產生標準化 5W。",
-        )
-        st.session_state["notif_assist_text"] = draft_text
-
-        st.markdown("**語音輸入（Beta）**")
-        st.caption("可錄音上傳；在無離線 STT 引擎條件下，請於下方輸入語音轉寫文字（或使用模擬轉寫）。")
-
-        if hasattr(st, "audio_input"):
-            audio = st.audio_input("按下開始錄音")
-        else:
-            st.warning("目前 Streamlit 版本不支援 `st.audio_input`，已切換為檔案上傳模式。建議升級 Streamlit。")
-            audio = st.file_uploader("上傳語音檔（wav/mp3/m4a）", type=["wav", "mp3", "m4a"], key="audio_upload_fallback")
-
-        voice_transcript = st.text_input("語音轉寫文字", value="", key="voice_transcript_text")
-        c_voice1, c_voice2 = st.columns(2)
-        if c_voice1.button("使用語音轉寫覆蓋草稿"):
-            if voice_transcript.strip():
-                st.session_state["notif_assist_text"] = voice_transcript.strip()
+            c_apply, c_reset = st.columns(2)
+            if c_apply.button("✅ 設為主流程通知", type="primary"):
+                st.session_state["main_notification_text"] = st.session_state.get("notif_assist_text", "")
+                st.success("已更新 Active Notification，其他分頁會即時使用新版通知。")
                 st.rerun()
+            if c_reset.button("↩️ 以主流程通知覆蓋 Draft"):
+                st.session_state["notif_assist_text"] = st.session_state.get("main_notification_text", "")
+                st.rerun()
+
+        with cstep2:
+            st.markdown("#### Current Active Notification")
+            st.code(st.session_state.get("main_notification_text", ""), language="text")
+            st.caption("這段文字是 parse_notification / standards / SAP payload 的實際輸入。")
+
+            st.markdown("#### 語音輸入（Beta）")
+            st.caption("可錄音上傳；在無離線 STT 引擎條件下，請於下方輸入語音轉寫文字（或使用模擬轉寫）。")
+
+            if hasattr(st, "audio_input"):
+                audio = st.audio_input("按下開始錄音")
             else:
-                st.warning("請先輸入語音轉寫文字。")
-        if c_voice2.button("使用模擬轉寫"):
-            mock_text = f"Operator voice note: vibration increased on {selected_name} during high load, please inspect soon."
-            st.session_state["notif_assist_text"] = mock_text
-            st.rerun()
+                st.warning("目前 Streamlit 版本不支援 `st.audio_input`，已切換為檔案上傳模式。建議升級 Streamlit。")
+                audio = st.file_uploader("上傳語音檔（wav/mp3/m4a）", type=["wav", "mp3", "m4a"], key="audio_upload_fallback")
 
-        if audio is not None:
-            st.success("已收到音訊檔（語音輸入成功）。")
+            voice_transcript = st.text_input("語音轉寫文字", value="", key="voice_transcript_text")
+            c_voice1, c_voice2 = st.columns(2)
+            if c_voice1.button("使用語音轉寫寫入 Draft"):
+                if voice_transcript.strip():
+                    st.session_state["notif_assist_text"] = voice_transcript.strip()
+                    st.rerun()
+                else:
+                    st.warning("請先輸入語音轉寫文字。")
+            if c_voice2.button("使用模擬轉寫"):
+                mock_text = f"Operator voice note: vibration increased on {selected_name} during high load, please inspect soon."
+                st.session_state["notif_assist_text"] = mock_text
+                st.rerun()
 
+            if audio is not None:
+                st.success("已收到音訊檔（語音輸入成功）。")
+
+        st.markdown("#### Step 3 · 送出標準化（Mistral / Mock）")
         if st.button("送出進行 5W 標準化", type="primary"):
             user_note = st.session_state.get("notif_assist_text", "")
             if use_local_mistral:
