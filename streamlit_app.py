@@ -619,7 +619,18 @@ def main():
     )
 
     default_idx = int(model_df["risk_score"].idxmax())
-    selected_name = st.sidebar.selectbox("Selected Asset", model_df["asset_name"].tolist(), index=default_idx)
+    asset_options = model_df["asset_name"].tolist()
+    if "selected_asset_name" not in st.session_state:
+        st.session_state["selected_asset_name"] = asset_options[default_idx]
+    if st.session_state["selected_asset_name"] not in asset_options:
+        st.session_state["selected_asset_name"] = asset_options[default_idx]
+
+    selected_name = st.sidebar.selectbox(
+        "Selected Asset",
+        asset_options,
+        index=asset_options.index(st.session_state["selected_asset_name"]),
+        key="selected_asset_name",
+    )
     selected_asset = model_df[model_df["asset_name"] == selected_name].iloc[0]
 
     risk_score = float(selected_asset["risk_score"])
@@ -809,7 +820,6 @@ def main():
                 if kw_cols[i % 4].button(kw, key=f"kw_{i}"):
                     current = st.session_state.get("notif_assist_editor", "")
                     st.session_state["notif_assist_editor"] = (current + " " + kw).strip()
-                    st.rerun()
 
             st.markdown("#### Step 2 · 推薦句型（可選）")
             templates = notification_templates(selected_asset["subsystem"])
@@ -819,19 +829,6 @@ def main():
                 if temp_cols[i % 2].button(f"+ {short_t}", key=f"tpl_{i}", help=t):
                     current = st.session_state.get("notif_assist_editor", "")
                     st.session_state["notif_assist_editor"] = (current + " " + t).strip()
-                    st.rerun()
-
-            st.markdown("#### Step 3 · 編輯 Draft")
-            st.text_area(
-                "Notification Draft",
-                height=200,
-                key="notif_assist_editor",
-                help="這是獨立草稿區，不會自動寫回左側主流程通知。",
-            )
-
-            if st.button("清空 Draft", key="clear_draft_btn"):
-                st.session_state["notif_assist_editor"] = ""
-                st.rerun()
 
         with cstep2:
             st.markdown("#### 語音輸入（Beta）")
@@ -843,25 +840,38 @@ def main():
                 st.warning("目前 Streamlit 版本不支援 `st.audio_input`，已切換為檔案上傳模式。建議升級 Streamlit。")
                 audio = st.file_uploader("上傳語音檔（wav/mp3/m4a）", type=["wav", "mp3", "m4a"], key="audio_upload_fallback")
 
-            voice_transcript = st.text_input("語音轉寫文字", value="", key="voice_transcript_text")
+            voice_transcript = st.text_input("語音轉寫文字", key="voice_transcript_text")
             c_voice1, c_voice2 = st.columns(2)
             if c_voice1.button("使用語音轉寫寫入 Draft"):
                 if voice_transcript.strip():
                     st.session_state["notif_assist_editor"] = voice_transcript.strip()
-                    st.rerun()
+                    st.success("已將語音轉寫寫入 Draft。")
                 else:
                     st.warning("請先輸入語音轉寫文字。")
             if c_voice2.button("使用模擬轉寫"):
                 mock_text = f"Operator voice note: vibration increased on {selected_name} during high load, please inspect soon."
                 st.session_state["notif_assist_editor"] = mock_text
-                st.rerun()
+                st.success("已套用模擬轉寫到 Draft。")
 
             if audio is not None:
                 st.success("已收到音訊檔（語音輸入成功）。")
 
-            st.markdown("#### Draft Preview")
-            st.code(st.session_state.get("notif_assist_editor", ""), language="text")
-            st.caption("此頁為獨立編輯，不和左側 Active Notification 自動連動。")
+        st.markdown("#### Step 3 · 編輯 Draft")
+        st.text_area(
+            "Notification Draft",
+            height=200,
+            key="notif_assist_editor",
+            help="這是獨立草稿區，不會自動寫回左側主流程通知。",
+        )
+
+        c_d1, c_d2 = st.columns([1, 1])
+        if c_d1.button("清空 Draft", key="clear_draft_btn"):
+            st.session_state["notif_assist_editor"] = ""
+        c_d2.caption("提示：點名詞/句型或語音按鈕後，Draft 會直接更新。")
+
+        st.markdown("#### Draft Preview")
+        st.code(st.session_state.get("notif_assist_editor", ""), language="text")
+        st.caption("此頁為獨立編輯，不和左側 Active Notification 自動連動。")
 
         st.markdown("#### Step 4 · 送出標準化（Mistral / Mock）")
         if st.button("送出進行 5W 標準化", type="primary"):
