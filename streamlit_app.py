@@ -325,6 +325,7 @@ def mock_mistral_5w(user_text: str, asset_name: str, subsystem: str) -> dict:
     }
 
 
+<<<<<<< codex/build-streamlit-app-for-oracle-concept-hptyal
 def call_local_mistral_5w(user_text: str, asset_name: str, subsystem: str, endpoint: str = "http://localhost:11434/api/generate", model: str = "mistral"):
     """Call a local Mistral-compatible endpoint (e.g., Ollama) to standardize 5W."""
     prompt = (
@@ -367,6 +368,8 @@ def call_local_mistral_5w(user_text: str, asset_name: str, subsystem: str, endpo
         return False, {}, str(ex)
 
 
+=======
+>>>>>>> main
 def compute_risk_score(systemic_priority_norm: float, current_health: float, anomaly_score: float):
     """Risk formula required by the demo specification."""
     anomaly_n = float(np.clip(anomaly_score / 5.0, 0, 1))
@@ -577,12 +580,15 @@ def main():
     planned_windows = [(datetime.now().date() + timedelta(days=d)).isoformat() for d in (7, 14, 21, 28, 42)]
     planned_window = st.sidebar.selectbox("Planned Window (Option C)", planned_windows)
 
+<<<<<<< codex/build-streamlit-app-for-oracle-concept-hptyal
     st.sidebar.markdown("---")
     st.sidebar.subheader("LLM Runtime")
     use_local_mistral = st.sidebar.toggle("Use local Mistral (Ollama)", value=False)
     local_mistral_model = st.sidebar.text_input("Local model", value="mistral")
     local_mistral_endpoint = st.sidebar.text_input("Local endpoint", value="http://localhost:11434/api/generate")
 
+=======
+>>>>>>> main
     options_df = evaluate_options(
         selected_asset,
         risk_score,
@@ -705,6 +711,7 @@ def main():
 
         st.markdown("**語音輸入（Beta）**")
         st.caption("可錄音上傳；在無離線 STT 引擎條件下，請於下方輸入語音轉寫文字（或使用模擬轉寫）。")
+<<<<<<< codex/build-streamlit-app-for-oracle-concept-hptyal
 
         if hasattr(st, "audio_input"):
             audio = st.audio_input("按下開始錄音")
@@ -712,6 +719,9 @@ def main():
             st.warning("目前 Streamlit 版本不支援 `st.audio_input`，已切換為檔案上傳模式。建議升級 Streamlit。")
             audio = st.file_uploader("上傳語音檔（wav/mp3/m4a）", type=["wav", "mp3", "m4a"], key="audio_upload_fallback")
 
+=======
+        audio = st.audio_input("按下開始錄音")
+>>>>>>> main
         voice_transcript = st.text_input("語音轉寫文字", value="", key="voice_transcript_text")
         c_voice1, c_voice2 = st.columns(2)
         if c_voice1.button("使用語音轉寫覆蓋草稿"):
@@ -728,6 +738,7 @@ def main():
         if audio is not None:
             st.success("已收到音訊檔（語音輸入成功）。")
 
+<<<<<<< codex/build-streamlit-app-for-oracle-concept-hptyal
         if st.button("送出進行 5W 標準化", type="primary"):
             user_note = st.session_state.get("notif_assist_text", "")
             if use_local_mistral:
@@ -744,18 +755,29 @@ def main():
             else:
                 result_5w = mock_mistral_5w(user_note, selected_name, selected_asset["subsystem"])
 
+=======
+        if st.button("送出給 Mistral（mock）進行 5W 標準化", type="primary"):
+            result_5w = mock_mistral_5w(st.session_state.get("notif_assist_text", ""), selected_name, selected_asset["subsystem"])
+>>>>>>> main
             st.markdown("#### 標準化 5W 結果")
             st.json(result_5w)
             fivew_df = pd.DataFrame(
                 {
+<<<<<<< codex/build-streamlit-app-for-oracle-concept-hptyal
                     "item": ["WHAT", "WHEN", "WHERE", "WHO", "WHY", "MODEL"],
+=======
+                    "item": ["WHAT", "WHEN", "WHERE", "WHO", "WHY"],
+>>>>>>> main
                     "content": [
                         str(result_5w["what"]),
                         str(result_5w["when"]),
                         str(result_5w["where"]),
                         str(result_5w["who"]),
                         str(result_5w["why"]),
+<<<<<<< codex/build-streamlit-app-for-oracle-concept-hptyal
                         str(result_5w.get("llm_model", "mock")),
+=======
+>>>>>>> main
                     ],
                 }
             )
