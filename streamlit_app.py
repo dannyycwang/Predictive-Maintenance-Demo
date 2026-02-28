@@ -1,6 +1,7 @@
 import json
 from datetime import datetime, timedelta
 from urllib import request, error
+import time
 
 import altair as alt
 import networkx as nx
@@ -568,6 +569,64 @@ def sanitize_chart_df(df: pd.DataFrame, required_cols=None) -> pd.DataFrame:
     return out
 
 
+def _draft_set(value: str):
+    st.session_state["notif_assist_editor"] = value
+
+
+def _draft_append(value: str):
+    current = st.session_state.get("notif_assist_editor", "")
+    st.session_state["notif_assist_editor"] = (current + " " + value).strip()
+
+
+def _draft_clear():
+    st.session_state["notif_assist_editor"] = ""
+
+
+def call_remote_stt(audio_bytes: bytes, endpoint: str, api_key: str = ""):
+    """Call remote STT endpoint. Expected response JSON with `text` (or `transcript`)."""
+    req_body = {"audio_base64": audio_bytes.hex(), "encoding": "hex"}
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    req = request.Request(
+        endpoint,
+        data=json.dumps(req_body).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    try:
+        with request.urlopen(req, timeout=25) as resp:
+            raw = resp.read().decode("utf-8")
+        out = json.loads(raw)
+        txt = str(out.get("text", out.get("transcript", ""))).strip()
+        if not txt:
+            return False, "", "STT response missing `text` field"
+        return True, txt, ""
+    except Exception as ex:
+        return False, "", str(ex)
+
+
+def typewriter_render(text: str, placeholder, speed_ms: int = 12):
+    """Render text progressively for a streaming-like UX."""
+    if not text:
+        placeholder.markdown("")
+        return
+    buff = ""
+    for ch in text:
+        buff += ch
+        placeholder.markdown(buff)
+        time.sleep(max(speed_ms, 1) / 1000.0)
+
+
+def get_secret_or_default(key: str, default: str = "") -> str:
+    try:
+        return str(st.secrets[key])
+    except Exception:
+        return default
+
+
+
 # ------------------------------
 # App UI
 # ------------------------------
@@ -701,15 +760,22 @@ def main():
         remote_api_model = st.sidebar.text_input("API model", value="mistral", key="remote_model_input")
         remote_api_endpoint = st.sidebar.text_input(
             "API endpoint",
-            value=st.secrets.get("MISTRAL_API_ENDPOINT", "https://your-api-endpoint/v1/mistral") if online_mode else "",
+            value=get_secret_or_default("MISTRAL_API_ENDPOINT", "https://your-api-endpoint/v1/mistral") if online_mode else "",
             key="remote_endpoint_input",
         )
         remote_api_key = st.sidebar.text_input(
             "API key",
-            value=st.secrets.get("MISTRAL_API_KEY", "") if online_mode else "",
+            value=get_secret_or_default("MISTRAL_API_KEY", "") if online_mode else "",
             type="password",
             key="remote_api_key_input",
         )
+
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("STT Runtime")
+    use_remote_stt = st.sidebar.toggle("Use remote STT API", value=False, key="use_remote_stt")
+    stt_endpoint = st.sidebar.text_input("STT endpoint", value=get_secret_or_default("STT_API_ENDPOINT", ""), key="stt_endpoint")
+    stt_api_key = st.sidebar.text_input("STT API key", value=get_secret_or_default("STT_API_KEY", ""), type="password", key="stt_api_key")
+    stream_render = st.sidebar.toggle("Typewriter output", value=True, key="typewriter_output")
 
     options_df = evaluate_options(
         selected_asset,
@@ -817,18 +883,16 @@ def main():
             kw_list = notification_keywords(selected_asset["subsystem"])
             kw_cols = st.columns(4)
             for i, kw in enumerate(kw_list):
-                if kw_cols[i % 4].button(kw, key=f"kw_{i}"):
-                    current = st.session_state.get("notif_assist_editor", "")
-                    st.session_state["notif_assist_editor"] = (current + " " + kw).strip()
+                if kw_cols[i % 4].button(kw, key=f"kw_{i}", on_click=_draft_append, args=(kw,)):
+                    pass
 
             st.markdown("#### Step 2 · 推薦句型（可選）")
             templates = notification_templates(selected_asset["subsystem"])
             temp_cols = st.columns(2)
             for i, t in enumerate(templates):
                 short_t = t if len(t) <= 52 else t[:52] + "..."
-                if temp_cols[i % 2].button(f"+ {short_t}", key=f"tpl_{i}", help=t):
-                    current = st.session_state.get("notif_assist_editor", "")
-                    st.session_state["notif_assist_editor"] = (current + " " + t).strip()
+                if temp_cols[i % 2].button(f"+ {short_t}", key=f"tpl_{i}", help=t, on_click=_draft_append, args=(t,)):
+                    pass
 
         with cstep2:
             st.markdown("#### 語音輸入（Beta）")
@@ -841,17 +905,37 @@ def main():
                 audio = st.file_uploader("上傳語音檔（wav/mp3/m4a）", type=["wav", "mp3", "m4a"], key="audio_upload_fallback")
 
             voice_transcript = st.text_input("語音轉寫文字", key="voice_transcript_text")
-            c_voice1, c_voice2 = st.columns(2)
+            c_voice1, c_voice2, c_voice3 = st.columns(3)
             if c_voice1.button("使用語音轉寫寫入 Draft"):
                 if voice_transcript.strip():
-                    st.session_state["notif_assist_editor"] = voice_transcript.strip()
+                    _draft_set(voice_transcript.strip())
                     st.success("已將語音轉寫寫入 Draft。")
                 else:
                     st.warning("請先輸入語音轉寫文字。")
             if c_voice2.button("使用模擬轉寫"):
                 mock_text = f"Operator voice note: vibration increased on {selected_name} during high load, please inspect soon."
-                st.session_state["notif_assist_editor"] = mock_text
+                _draft_set(mock_text)
                 st.success("已套用模擬轉寫到 Draft。")
+
+            if c_voice3.button("語音檔轉寫到 Draft"):
+                if audio is None:
+                    st.warning("請先錄音或上傳語音檔。")
+                elif not use_remote_stt or not stt_endpoint.strip():
+                    st.warning("請先在側欄啟用 Use remote STT API 並設定 STT endpoint。")
+                else:
+                    try:
+                        audio_bytes = audio.read() if hasattr(audio, "read") else bytes(audio)
+                    except Exception:
+                        audio_bytes = b""
+                    if not audio_bytes:
+                        st.warning("無法讀取音訊資料。")
+                    else:
+                        ok_stt, stt_text, stt_err = call_remote_stt(audio_bytes, stt_endpoint.strip(), stt_api_key)
+                        if ok_stt:
+                            _draft_set(stt_text)
+                            st.success("STT 成功，已寫入 Draft。")
+                        else:
+                            st.warning(f"STT 失敗：{stt_err}")
 
             if audio is not None:
                 st.success("已收到音訊檔（語音輸入成功）。")
@@ -865,8 +949,7 @@ def main():
         )
 
         c_d1, c_d2 = st.columns([1, 1])
-        if c_d1.button("清空 Draft", key="clear_draft_btn"):
-            st.session_state["notif_assist_editor"] = ""
+        c_d1.button("清空 Draft", key="clear_draft_btn", on_click=_draft_clear)
         c_d2.caption("提示：點名詞/句型或語音按鈕後，Draft 會直接更新。")
 
         st.markdown("#### Draft Preview")
@@ -918,7 +1001,12 @@ def main():
                 }
             )
             st.dataframe(fivew_df, use_container_width=True, hide_index=True)
-            st.code(result_5w["standardized_5w"], language="text")
+            if stream_render:
+                st.markdown("**Streaming output preview**")
+                ph = st.empty()
+                typewriter_render(result_5w["standardized_5w"], ph, speed_ms=10)
+            else:
+                st.code(result_5w["standardized_5w"], language="text")
 
     with tabs[2]:
         st.subheader("Asset Risk Graph")
