@@ -634,28 +634,46 @@ def main():
 
     if online_mode:
         st.sidebar.caption("Online mode: use remote API endpoint (for Streamlit Cloud).")
-        use_local_mistral = False
-        use_remote_api = st.sidebar.toggle("Use remote Mistral API", value=True, key="remote_api_toggle_online")
-        remote_api_model = st.sidebar.text_input("API model", value="mistral")
+        llm_source = "remote_api"
+    else:
+        llm_source = st.sidebar.radio(
+            "LLM source",
+            ["mock", "local_mistral", "remote_api"],
+            index=0,
+            key="llm_source_radio",
+            format_func=lambda x: {
+                "mock": "Mock (offline)",
+                "local_mistral": "Local Mistral (Ollama)",
+                "remote_api": "Remote Mistral API",
+            }[x],
+        )
+
+    use_local_mistral = llm_source == "local_mistral"
+    use_remote_api = llm_source == "remote_api"
+
+    local_mistral_model = "mistral"
+    local_mistral_endpoint = "http://localhost:11434/api/generate"
+    remote_api_model = "mistral"
+    remote_api_endpoint = ""
+    remote_api_key = ""
+
+    if use_local_mistral:
+        local_mistral_model = st.sidebar.text_input("Local model", value="mistral", key="local_model_input")
+        local_mistral_endpoint = st.sidebar.text_input("Local endpoint", value="http://localhost:11434/api/generate", key="local_endpoint_input")
+
+    if use_remote_api:
+        remote_api_model = st.sidebar.text_input("API model", value="mistral", key="remote_model_input")
         remote_api_endpoint = st.sidebar.text_input(
             "API endpoint",
-            value=st.secrets.get("MISTRAL_API_ENDPOINT", "https://your-api-endpoint/v1/mistral"),
+            value=st.secrets.get("MISTRAL_API_ENDPOINT", "https://your-api-endpoint/v1/mistral") if online_mode else "",
+            key="remote_endpoint_input",
         )
         remote_api_key = st.sidebar.text_input(
             "API key",
-            value=st.secrets.get("MISTRAL_API_KEY", ""),
+            value=st.secrets.get("MISTRAL_API_KEY", "") if online_mode else "",
             type="password",
+            key="remote_api_key_input",
         )
-        local_mistral_model = "mistral"
-        local_mistral_endpoint = "http://localhost:11434/api/generate"
-    else:
-        use_local_mistral = st.sidebar.toggle("Use local Mistral (Ollama)", value=False, key="local_mistral_toggle")
-        use_remote_api = st.sidebar.toggle("Use remote Mistral API", value=False, key="remote_api_toggle_local")
-        local_mistral_model = st.sidebar.text_input("Local model", value="mistral")
-        local_mistral_endpoint = st.sidebar.text_input("Local endpoint", value="http://localhost:11434/api/generate")
-        remote_api_model = st.sidebar.text_input("API model", value="mistral")
-        remote_api_endpoint = st.sidebar.text_input("API endpoint", value="")
-        remote_api_key = st.sidebar.text_input("API key", value="", type="password")
 
     options_df = evaluate_options(
         selected_asset,
