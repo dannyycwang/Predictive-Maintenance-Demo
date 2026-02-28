@@ -418,6 +418,7 @@ def call_remote_mistral_5w(user_text: str, asset_name: str, subsystem: str, endp
         return False, {}, str(ex)
 
 
+
 def compute_risk_score(systemic_priority_norm: float, current_health: float, anomaly_score: float):
     """Risk formula required by the demo specification."""
     anomaly_n = float(np.clip(anomaly_score / 5.0, 0, 1))
@@ -657,6 +658,12 @@ def main():
         remote_api_endpoint = st.sidebar.text_input("API endpoint", value="")
         remote_api_key = st.sidebar.text_input("API key", value="", type="password")
 
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("LLM Runtime")
+    use_local_mistral = st.sidebar.toggle("Use local Mistral (Ollama)", value=False)
+    local_mistral_model = st.sidebar.text_input("Local model", value="mistral")
+    local_mistral_endpoint = st.sidebar.text_input("Local endpoint", value="http://localhost:11434/api/generate")
+    
     options_df = evaluate_options(
         selected_asset,
         risk_score,
@@ -830,11 +837,14 @@ def main():
             else:
                 result_5w = mock_mistral_5w(user_note, selected_name, selected_asset["subsystem"])
 
+
             st.markdown("#### 標準化 5W 結果")
             st.json(result_5w)
             fivew_df = pd.DataFrame(
                 {
                     "item": ["WHAT", "WHEN", "WHERE", "WHO", "WHY", "MODEL"],
+                    "item": ["WHAT", "WHEN", "WHERE", "WHO", "WHY", "MODEL"],
+
                     "content": [
                         str(result_5w["what"]),
                         str(result_5w["when"]),
@@ -842,6 +852,8 @@ def main():
                         str(result_5w["who"]),
                         str(result_5w["why"]),
                         str(result_5w.get("llm_model", "mock")),
+                        str(result_5w.get("llm_model", "mock")),
+
                     ],
                 }
             )
