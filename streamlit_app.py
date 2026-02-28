@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timedelta
 from urllib import request, error
 import time
+import re
 
 import altair as alt
 import networkx as nx
@@ -607,16 +608,27 @@ def call_remote_stt(audio_bytes: bytes, endpoint: str, api_key: str = ""):
         return False, "", str(ex)
 
 
-def typewriter_render(text: str, placeholder, speed_ms: int = 12):
-    """Render text progressively for a streaming-like UX."""
+def typewriter_render(text: str, placeholder, speed_ms: int = 18, cursor: str = "▌"):
+    """Render text in token-like chunks for a ChatGPT-style streaming UX."""
     if not text:
         placeholder.markdown("")
         return
+
+    speed = max(speed_ms, 1) / 1000.0
+    tokens = [tok for tok in re.split(r"(\s+)", text) if tok]
     buff = ""
-    for ch in text:
-        buff += ch
-        placeholder.markdown(buff)
-        time.sleep(max(speed_ms, 1) / 1000.0)
+    for tok in tokens:
+        buff += tok
+        placeholder.markdown(f"```text\n{buff}{cursor}\n```")
+
+        wait = speed
+        if tok.strip().endswith((".", "!", "?", "；", "。")):
+            wait = speed * 5
+        elif tok.strip().endswith((",", "，", ":", "：")):
+            wait = speed * 2
+        time.sleep(wait)
+
+    placeholder.markdown(f"```text\n{buff}\n```")
 
 
 def get_secret_or_default(key: str, default: str = "") -> str:
@@ -775,7 +787,7 @@ def main():
     use_remote_stt = st.sidebar.toggle("Use remote STT API", value=False, key="use_remote_stt")
     stt_endpoint = st.sidebar.text_input("STT endpoint", value=get_secret_or_default("STT_API_ENDPOINT", ""), key="stt_endpoint")
     stt_api_key = st.sidebar.text_input("STT API key", value=get_secret_or_default("STT_API_KEY", ""), type="password", key="stt_api_key")
-    stream_render = st.sidebar.toggle("Typewriter output", value=True, key="typewriter_output")
+    stream_render = st.sidebar.toggle("Typewriter output (ChatGPT-like)", value=True, key="typewriter_output")
 
     options_df = evaluate_options(
         selected_asset,
@@ -1004,7 +1016,7 @@ def main():
             if stream_render:
                 st.markdown("**Streaming output preview**")
                 ph = st.empty()
-                typewriter_render(result_5w["standardized_5w"], ph, speed_ms=10)
+                typewriter_render(result_5w["standardized_5w"], ph, speed_ms=18)
             else:
                 st.code(result_5w["standardized_5w"], language="text")
 
