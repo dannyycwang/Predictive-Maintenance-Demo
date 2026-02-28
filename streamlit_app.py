@@ -284,6 +284,16 @@ def notification_templates(subsystem: str):
     return base[:5]
 
 
+def notification_keywords(subsystem: str):
+    """Short keyword recommendations for operators."""
+    common = ["vibration", "noise", "temperature", "pressure", "leak", "bearing", "seal", "alignment"]
+    if subsystem == "Electrical":
+        return ["hotspot", "insulation", "winding", "trip", "overload", "temperature", "partial discharge", "switchgear"]
+    if subsystem == "Process":
+        return ["pressure", "leak", "valve", "flow", "corrosion", "fouling", "separator", "fluctuation"]
+    return common
+
+
 def mock_mistral_5w(user_text: str, asset_name: str, subsystem: str) -> dict:
     """Offline mock of Mistral post-processing into standardized 5W maintenance note."""
     txt = (user_text or "").strip()
@@ -788,41 +798,42 @@ def main():
 
     with tabs[1]:
         st.subheader("Notification Assist (5W)")
-        st.info("頁面說明：這裡是唯一的通知編輯入口。先用推薦句型快速組稿，再一鍵設為主流程通知。")
+        st.info("頁面說明：這頁為獨立草稿頁，不會自動改動主流程通知。先填 Draft，再送出 5W 標準化。")
 
         cstep1, cstep2 = st.columns([1.2, 1])
         with cstep1:
-            st.markdown("#### Step 1 · 推薦句型")
+            st.markdown("#### Step 1 · 推薦名詞（短詞）")
+            kw_list = notification_keywords(selected_asset["subsystem"])
+            kw_cols = st.columns(4)
+            for i, kw in enumerate(kw_list):
+                if kw_cols[i % 4].button(kw, key=f"kw_{i}"):
+                    current = st.session_state.get("notif_assist_editor", "")
+                    st.session_state["notif_assist_editor"] = (current + " " + kw).strip()
+                    st.rerun()
+
+            st.markdown("#### Step 2 · 推薦句型（可選）")
             templates = notification_templates(selected_asset["subsystem"])
             temp_cols = st.columns(2)
             for i, t in enumerate(templates):
-                if temp_cols[i % 2].button(f"+ {t}", key=f"tpl_{i}"):
+                short_t = t if len(t) <= 52 else t[:52] + "..."
+                if temp_cols[i % 2].button(f"+ {short_t}", key=f"tpl_{i}", help=t):
                     current = st.session_state.get("notif_assist_editor", "")
                     st.session_state["notif_assist_editor"] = (current + " " + t).strip()
                     st.rerun()
 
-            st.markdown("#### Step 2 · 編輯 Draft")
+            st.markdown("#### Step 3 · 編輯 Draft")
             st.text_area(
                 "Notification Draft",
-                height=180,
+                height=200,
                 key="notif_assist_editor",
-                help="這裡編輯後，按『設為主流程通知』才會影響其他分頁。",
+                help="這是獨立草稿區，不會自動寫回左側主流程通知。",
             )
 
-            c_apply, c_reset = st.columns(2)
-            if c_apply.button("✅ 設為主流程通知", type="primary"):
-                st.session_state["main_notification_text"] = st.session_state.get("notif_assist_editor", "")
-                st.success("已更新 Active Notification，其他分頁會即時使用新版通知。")
-                st.rerun()
-            if c_reset.button("↩️ 以主流程通知覆蓋 Draft"):
-                st.session_state["notif_assist_editor"] = st.session_state.get("main_notification_text", "")
+            if st.button("清空 Draft", key="clear_draft_btn"):
+                st.session_state["notif_assist_editor"] = ""
                 st.rerun()
 
         with cstep2:
-            st.markdown("#### Current Active Notification")
-            st.code(st.session_state.get("main_notification_text", ""), language="text")
-            st.caption("這段文字是 parse_notification / standards / SAP payload 的實際輸入。")
-
             st.markdown("#### 語音輸入（Beta）")
             st.caption("可錄音上傳；在無離線 STT 引擎條件下，請於下方輸入語音轉寫文字（或使用模擬轉寫）。")
 
@@ -848,7 +859,11 @@ def main():
             if audio is not None:
                 st.success("已收到音訊檔（語音輸入成功）。")
 
-        st.markdown("#### Step 3 · 送出標準化（Mistral / Mock）")
+            st.markdown("#### Draft Preview")
+            st.code(st.session_state.get("notif_assist_editor", ""), language="text")
+            st.caption("此頁為獨立編輯，不和左側 Active Notification 自動連動。")
+
+        st.markdown("#### Step 4 · 送出標準化（Mistral / Mock）")
         if st.button("送出進行 5W 標準化", type="primary"):
             user_note = st.session_state.get("notif_assist_editor", "")
             if use_local_mistral:
