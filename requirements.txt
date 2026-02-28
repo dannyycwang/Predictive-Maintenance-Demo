@@ -1,5 +1,4 @@
 streamlit>=1.39.0
-streamlit>=1.39.0
 networkx
 pandas
 numpy

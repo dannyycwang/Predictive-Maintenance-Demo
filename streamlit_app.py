@@ -418,7 +418,6 @@ def call_remote_mistral_5w(user_text: str, asset_name: str, subsystem: str, endp
         return False, {}, str(ex)
 
 
-
 def compute_risk_score(systemic_priority_norm: float, current_health: float, anomaly_score: float):
     """Risk formula required by the demo specification."""
     anomaly_n = float(np.clip(anomaly_score / 5.0, 0, 1))
@@ -582,7 +581,7 @@ def main():
     with st.sidebar:
         st.header("Controls")
         scenario = st.selectbox("Scenario", ["Offshore expensive", "Onshore cheaper"], help="Changes mobilization cost multipliers.")
-        demo_mode = st.toggle("Demo Mode (randomize mock data)", value=True)
+        demo_mode = st.toggle("Demo Mode (randomize mock data)", value=True, key="demo_mode_toggle")
 
         st.subheader("Risk Status Thresholds")
         green_threshold = st.slider("Green upper bound (<)", min_value=20, max_value=50, value=35)
@@ -636,7 +635,7 @@ def main():
     if online_mode:
         st.sidebar.caption("Online mode: use remote API endpoint (for Streamlit Cloud).")
         use_local_mistral = False
-        use_remote_api = st.sidebar.toggle("Use remote Mistral API", value=True)
+        use_remote_api = st.sidebar.toggle("Use remote Mistral API", value=True, key="remote_api_toggle_online")
         remote_api_model = st.sidebar.text_input("API model", value="mistral")
         remote_api_endpoint = st.sidebar.text_input(
             "API endpoint",
@@ -650,20 +649,14 @@ def main():
         local_mistral_model = "mistral"
         local_mistral_endpoint = "http://localhost:11434/api/generate"
     else:
-        use_local_mistral = st.sidebar.toggle("Use local Mistral (Ollama)", value=False)
-        use_remote_api = st.sidebar.toggle("Use remote Mistral API", value=False)
+        use_local_mistral = st.sidebar.toggle("Use local Mistral (Ollama)", value=False, key="local_mistral_toggle")
+        use_remote_api = st.sidebar.toggle("Use remote Mistral API", value=False, key="remote_api_toggle_local")
         local_mistral_model = st.sidebar.text_input("Local model", value="mistral")
         local_mistral_endpoint = st.sidebar.text_input("Local endpoint", value="http://localhost:11434/api/generate")
         remote_api_model = st.sidebar.text_input("API model", value="mistral")
         remote_api_endpoint = st.sidebar.text_input("API endpoint", value="")
         remote_api_key = st.sidebar.text_input("API key", value="", type="password")
 
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("LLM Runtime")
-    use_local_mistral = st.sidebar.toggle("Use local Mistral (Ollama)", value=False)
-    local_mistral_model = st.sidebar.text_input("Local model", value="mistral")
-    local_mistral_endpoint = st.sidebar.text_input("Local endpoint", value="http://localhost:11434/api/generate")
-    
     options_df = evaluate_options(
         selected_asset,
         risk_score,
@@ -837,14 +830,11 @@ def main():
             else:
                 result_5w = mock_mistral_5w(user_note, selected_name, selected_asset["subsystem"])
 
-
             st.markdown("#### 標準化 5W 結果")
             st.json(result_5w)
             fivew_df = pd.DataFrame(
                 {
                     "item": ["WHAT", "WHEN", "WHERE", "WHO", "WHY", "MODEL"],
-                    "item": ["WHAT", "WHEN", "WHERE", "WHO", "WHY", "MODEL"],
-
                     "content": [
                         str(result_5w["what"]),
                         str(result_5w["when"]),
@@ -852,8 +842,6 @@ def main():
                         str(result_5w["who"]),
                         str(result_5w["why"]),
                         str(result_5w.get("llm_model", "mock")),
-                        str(result_5w.get("llm_model", "mock")),
-
                     ],
                 }
             )
