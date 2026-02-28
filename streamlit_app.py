@@ -325,7 +325,6 @@ def mock_mistral_5w(user_text: str, asset_name: str, subsystem: str) -> dict:
     }
 
 
-<<<<<<< codex/build-streamlit-app-for-oracle-concept-hptyal
 def call_local_mistral_5w(user_text: str, asset_name: str, subsystem: str, endpoint: str = "http://localhost:11434/api/generate", model: str = "mistral"):
     """Call a local Mistral-compatible endpoint (e.g., Ollama) to standardize 5W."""
     prompt = (
@@ -368,8 +367,58 @@ def call_local_mistral_5w(user_text: str, asset_name: str, subsystem: str, endpo
         return False, {}, str(ex)
 
 
-=======
->>>>>>> main
+def call_remote_mistral_5w(user_text: str, asset_name: str, subsystem: str, endpoint: str, model: str, api_key: str = ""):
+    """Call remote API endpoint for 5W standardization (cloud deployment mode)."""
+    prompt = (
+        "You are a maintenance assistant. Convert the user note into strict 5W fields. "
+        "Return ONLY valid JSON with keys: what, when, where, who, why, standardized_5w. "
+        f"Asset: {asset_name} | Subsystem: {subsystem}. User note: {user_text}"
+    )
+
+    payload = {
+        "model": model,
+        "prompt": prompt,
+        "stream": False,
+        "format": "json",
+    }
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    req = request.Request(
+        endpoint,
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+
+    try:
+        with request.urlopen(req, timeout=18) as resp:
+            raw = resp.read().decode("utf-8")
+        outer = json.loads(raw)
+
+        # Accept either direct 5W JSON or wrapped `response` JSON string.
+        if all(k in outer for k in ["what", "when", "where", "who", "why", "standardized_5w"]):
+            parsed = outer
+        else:
+            text = outer.get("response", "{}")
+            parsed = json.loads(text)
+
+        out = {
+            "what": str(parsed.get("what", "N/A")),
+            "when": str(parsed.get("when", "N/A")),
+            "where": str(parsed.get("where", f"{asset_name} ({subsystem})")),
+            "who": str(parsed.get("who", "Field Operator")),
+            "why": str(parsed.get("why", "N/A")),
+            "standardized_5w": str(parsed.get("standardized_5w", "N/A")),
+            "llm_model": f"{model} (remote API)",
+        }
+        return True, out, ""
+    except (error.URLError, TimeoutError, json.JSONDecodeError, error.HTTPError, ValueError) as ex:
+        return False, {}, str(ex)
+
+
+
 def compute_risk_score(systemic_priority_norm: float, current_health: float, anomaly_score: float):
     """Risk formula required by the demo specification."""
     anomaly_n = float(np.clip(anomaly_score / 5.0, 0, 1))
@@ -580,15 +629,41 @@ def main():
     planned_windows = [(datetime.now().date() + timedelta(days=d)).isoformat() for d in (7, 14, 21, 28, 42)]
     planned_window = st.sidebar.selectbox("Planned Window (Option C)", planned_windows)
 
-<<<<<<< codex/build-streamlit-app-for-oracle-concept-hptyal
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("LLM Runtime")
+    online_mode = bool(st.session_state.get("_online_mode", False))
+
+    if online_mode:
+        st.sidebar.caption("Online mode: use remote API endpoint (for Streamlit Cloud).")
+        use_local_mistral = False
+        use_remote_api = st.sidebar.toggle("Use remote Mistral API", value=True)
+        remote_api_model = st.sidebar.text_input("API model", value="mistral")
+        remote_api_endpoint = st.sidebar.text_input(
+            "API endpoint",
+            value=st.secrets.get("MISTRAL_API_ENDPOINT", "https://your-api-endpoint/v1/mistral"),
+        )
+        remote_api_key = st.sidebar.text_input(
+            "API key",
+            value=st.secrets.get("MISTRAL_API_KEY", ""),
+            type="password",
+        )
+        local_mistral_model = "mistral"
+        local_mistral_endpoint = "http://localhost:11434/api/generate"
+    else:
+        use_local_mistral = st.sidebar.toggle("Use local Mistral (Ollama)", value=False)
+        use_remote_api = st.sidebar.toggle("Use remote Mistral API", value=False)
+        local_mistral_model = st.sidebar.text_input("Local model", value="mistral")
+        local_mistral_endpoint = st.sidebar.text_input("Local endpoint", value="http://localhost:11434/api/generate")
+        remote_api_model = st.sidebar.text_input("API model", value="mistral")
+        remote_api_endpoint = st.sidebar.text_input("API endpoint", value="")
+        remote_api_key = st.sidebar.text_input("API key", value="", type="password")
+
     st.sidebar.markdown("---")
     st.sidebar.subheader("LLM Runtime")
     use_local_mistral = st.sidebar.toggle("Use local Mistral (Ollama)", value=False)
     local_mistral_model = st.sidebar.text_input("Local model", value="mistral")
     local_mistral_endpoint = st.sidebar.text_input("Local endpoint", value="http://localhost:11434/api/generate")
-
-=======
->>>>>>> main
+    
     options_df = evaluate_options(
         selected_asset,
         risk_score,
@@ -711,7 +786,6 @@ def main():
 
         st.markdown("**語音輸入（Beta）**")
         st.caption("可錄音上傳；在無離線 STT 引擎條件下，請於下方輸入語音轉寫文字（或使用模擬轉寫）。")
-<<<<<<< codex/build-streamlit-app-for-oracle-concept-hptyal
 
         if hasattr(st, "audio_input"):
             audio = st.audio_input("按下開始錄音")
@@ -719,9 +793,6 @@ def main():
             st.warning("目前 Streamlit 版本不支援 `st.audio_input`，已切換為檔案上傳模式。建議升級 Streamlit。")
             audio = st.file_uploader("上傳語音檔（wav/mp3/m4a）", type=["wav", "mp3", "m4a"], key="audio_upload_fallback")
 
-=======
-        audio = st.audio_input("按下開始錄音")
->>>>>>> main
         voice_transcript = st.text_input("語音轉寫文字", value="", key="voice_transcript_text")
         c_voice1, c_voice2 = st.columns(2)
         if c_voice1.button("使用語音轉寫覆蓋草稿"):
@@ -738,7 +809,6 @@ def main():
         if audio is not None:
             st.success("已收到音訊檔（語音輸入成功）。")
 
-<<<<<<< codex/build-streamlit-app-for-oracle-concept-hptyal
         if st.button("送出進行 5W 標準化", type="primary"):
             user_note = st.session_state.get("notif_assist_text", "")
             if use_local_mistral:
@@ -752,32 +822,38 @@ def main():
                 if not ok:
                     st.warning(f"本機 Mistral 呼叫失敗，改用 mock 流程。原因: {err}")
                     result_5w = mock_mistral_5w(user_note, selected_name, selected_asset["subsystem"])
+            elif use_remote_api and remote_api_endpoint.strip():
+                ok, result_5w, err = call_remote_mistral_5w(
+                    user_note,
+                    selected_name,
+                    selected_asset["subsystem"],
+                    endpoint=remote_api_endpoint.strip(),
+                    model=remote_api_model,
+                    api_key=remote_api_key,
+                )
+                if not ok:
+                    st.warning(f"Remote API 呼叫失敗，改用 mock 流程。原因: {err}")
+                    result_5w = mock_mistral_5w(user_note, selected_name, selected_asset["subsystem"])
             else:
                 result_5w = mock_mistral_5w(user_note, selected_name, selected_asset["subsystem"])
 
-=======
-        if st.button("送出給 Mistral（mock）進行 5W 標準化", type="primary"):
-            result_5w = mock_mistral_5w(st.session_state.get("notif_assist_text", ""), selected_name, selected_asset["subsystem"])
->>>>>>> main
+
             st.markdown("#### 標準化 5W 結果")
             st.json(result_5w)
             fivew_df = pd.DataFrame(
                 {
-<<<<<<< codex/build-streamlit-app-for-oracle-concept-hptyal
                     "item": ["WHAT", "WHEN", "WHERE", "WHO", "WHY", "MODEL"],
-=======
-                    "item": ["WHAT", "WHEN", "WHERE", "WHO", "WHY"],
->>>>>>> main
+                    "item": ["WHAT", "WHEN", "WHERE", "WHO", "WHY", "MODEL"],
+
                     "content": [
                         str(result_5w["what"]),
                         str(result_5w["when"]),
                         str(result_5w["where"]),
                         str(result_5w["who"]),
                         str(result_5w["why"]),
-<<<<<<< codex/build-streamlit-app-for-oracle-concept-hptyal
                         str(result_5w.get("llm_model", "mock")),
-=======
->>>>>>> main
+                        str(result_5w.get("llm_model", "mock")),
+
                     ],
                 }
             )

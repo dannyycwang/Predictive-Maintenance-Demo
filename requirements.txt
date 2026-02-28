@@ -1,8 +1,5 @@
-<<<<<<< codex/build-streamlit-app-for-oracle-concept-hptyal
 streamlit>=1.39.0
-=======
-streamlit
->>>>>>> main
+streamlit>=1.39.0
 networkx
 pandas
 numpy
