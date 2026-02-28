@@ -623,8 +623,8 @@ def main():
     )
     if "main_notification_text" not in st.session_state:
         st.session_state["main_notification_text"] = notification_default
-    if "notif_assist_text" not in st.session_state:
-        st.session_state["notif_assist_text"] = st.session_state["main_notification_text"]
+    if "notif_assist_editor" not in st.session_state:
+        st.session_state["notif_assist_editor"] = st.session_state["main_notification_text"]
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("Active Notification (Pipeline Input)")
@@ -797,27 +797,25 @@ def main():
             temp_cols = st.columns(2)
             for i, t in enumerate(templates):
                 if temp_cols[i % 2].button(f"+ {t}", key=f"tpl_{i}"):
-                    current = st.session_state.get("notif_assist_text", "")
-                    st.session_state["notif_assist_text"] = (current + " " + t).strip()
+                    current = st.session_state.get("notif_assist_editor", "")
+                    st.session_state["notif_assist_editor"] = (current + " " + t).strip()
                     st.rerun()
 
             st.markdown("#### Step 2 · 編輯 Draft")
-            draft_text = st.text_area(
+            st.text_area(
                 "Notification Draft",
-                value=st.session_state.get("notif_assist_text", ""),
                 height=180,
                 key="notif_assist_editor",
                 help="這裡編輯後，按『設為主流程通知』才會影響其他分頁。",
             )
-            st.session_state["notif_assist_text"] = draft_text
 
             c_apply, c_reset = st.columns(2)
             if c_apply.button("✅ 設為主流程通知", type="primary"):
-                st.session_state["main_notification_text"] = st.session_state.get("notif_assist_text", "")
+                st.session_state["main_notification_text"] = st.session_state.get("notif_assist_editor", "")
                 st.success("已更新 Active Notification，其他分頁會即時使用新版通知。")
                 st.rerun()
             if c_reset.button("↩️ 以主流程通知覆蓋 Draft"):
-                st.session_state["notif_assist_text"] = st.session_state.get("main_notification_text", "")
+                st.session_state["notif_assist_editor"] = st.session_state.get("main_notification_text", "")
                 st.rerun()
 
         with cstep2:
@@ -838,13 +836,13 @@ def main():
             c_voice1, c_voice2 = st.columns(2)
             if c_voice1.button("使用語音轉寫寫入 Draft"):
                 if voice_transcript.strip():
-                    st.session_state["notif_assist_text"] = voice_transcript.strip()
+                    st.session_state["notif_assist_editor"] = voice_transcript.strip()
                     st.rerun()
                 else:
                     st.warning("請先輸入語音轉寫文字。")
             if c_voice2.button("使用模擬轉寫"):
                 mock_text = f"Operator voice note: vibration increased on {selected_name} during high load, please inspect soon."
-                st.session_state["notif_assist_text"] = mock_text
+                st.session_state["notif_assist_editor"] = mock_text
                 st.rerun()
 
             if audio is not None:
@@ -852,7 +850,7 @@ def main():
 
         st.markdown("#### Step 3 · 送出標準化（Mistral / Mock）")
         if st.button("送出進行 5W 標準化", type="primary"):
-            user_note = st.session_state.get("notif_assist_text", "")
+            user_note = st.session_state.get("notif_assist_editor", "")
             if use_local_mistral:
                 ok, result_5w, err = call_local_mistral_5w(
                     user_note,
