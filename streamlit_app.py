@@ -881,23 +881,38 @@ def main():
         st.caption("Summary 使用最新一筆資料；Delta = 最新值 - 倒數第二筆。Risk formula: risk_score = (systemic_priority_normalized*0.5 + (100-current_health)/100*0.3 + anomaly_score_normalized*0.2) * 100")
 
         overview_cols = ["asset_id", "asset_name", "subsystem", "criticality", "current_health", "anomaly_score", "systemic_priority", "risk_score"]
-        risk_rank = model_df[overview_cols].sort_values("risk_score", ascending=False)
-        risk_rank_chart = sanitize_chart_df(risk_rank, ["risk_score", "asset_name"])
+        risk_rank = model_df[overview_cols].sort_values(["subsystem", "risk_score"], ascending=[True, False]).copy()
+        risk_rank["risk_level"] = np.where(risk_rank["risk_score"] > 40, "High (>40)", "Normal (<=40)")
+        risk_rank_chart = sanitize_chart_df(risk_rank, ["risk_score", "asset_name", "subsystem"]) 
         with st.expander("查看明細資料表（Asset risk rank）", expanded=False):
             st.dataframe(risk_rank, use_container_width=True, hide_index=True)
 
-        chart = (
-            alt.Chart(risk_rank_chart)
-            .mark_bar(cornerRadiusTopLeft=5, cornerRadiusTopRight=5)
-            .encode(
-                x=alt.X("risk_score:Q", title="Risk Score"),
-                y=alt.Y("asset_name:N", sort="-x", title="Asset"),
-                color=alt.Color("subsystem:N", title="Subsystem"),
-                tooltip=["asset_name", "risk_score", "current_health", "systemic_priority"],
-            )
-            .properties(height=420)
-        )
-        st.altair_chart(chart, use_container_width=True)
+        st.markdown("#### Subsystem Risk Panels")
+        panel_cols = st.columns(3)
+        for idx, subsystem in enumerate(["Electrical", "Process", "Rotating"]):
+            panel_df = risk_rank_chart[risk_rank_chart["subsystem"] == subsystem].copy()
+            panel_df = panel_df.sort_values("risk_score", ascending=False)
+            with panel_cols[idx]:
+                st.markdown(f"**{subsystem}**")
+                if panel_df.empty:
+                    st.info("No assets")
+                else:
+                    panel_chart = (
+                        alt.Chart(panel_df)
+                        .mark_bar(cornerRadiusTopLeft=5, cornerRadiusTopRight=5)
+                        .encode(
+                            x=alt.X("risk_score:Q", title="Risk Score"),
+                            y=alt.Y("asset_name:N", sort="-x", title=None),
+                            color=alt.Color(
+                                "risk_level:N",
+                                scale=alt.Scale(domain=["Normal (<=40)", "High (>40)"], range=["#93C5FD", "#F9A8D4"]),
+                                legend=None,
+                            ),
+                            tooltip=["asset_name", "risk_score", "current_health", "systemic_priority"],
+                        )
+                        .properties(height=320)
+                    )
+                    st.altair_chart(panel_chart, use_container_width=True)
 
         st.markdown("#### Notification Structuring")
         st.markdown(f"系統判斷目前通知最可能是 **{parsed_notification['suspected_failure_type']}**，疑似位置為 **{parsed_notification['suspected_component']}**，置信度 **{parsed_notification['confidence']:.2f}**。")
