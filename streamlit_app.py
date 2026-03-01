@@ -337,65 +337,28 @@ def mock_mistral_5w(user_text: str, asset_name: str, subsystem: str) -> dict:
     }
 
 
-def call_local_mistral_5w(user_text: str, asset_name: str, subsystem: str, endpoint: str = "http://localhost:11434/api/generate", model: str = "mistral"):
-    """Call a local Mistral-compatible endpoint (e.g., Ollama) to standardize 5W."""
-    prompt = (
-        "You are a maintenance assistant. Convert the user note into strict 5W fields. "
-        "Return ONLY valid JSON with keys: what, when, where, who, why, standardized_5w. "
-        f"Asset: {asset_name} | Subsystem: {subsystem}. User note: {user_text}"
+def call_openai_chatgpt_5w(user_text: str, asset_name: str, subsystem: str, model: str, api_key: str, endpoint: str = "https://api.openai.com/v1/chat/completions"):
+    """Call OpenAI Chat Completions API to standardize operator notes into 5W JSON."""
+    system_prompt = (
+        "You are a maintenance assistant. Convert operator note into strict 5W fields. "
+        "Return JSON object only with keys: what, when, where, who, why, standardized_5w."
     )
-    payload = {
-        "model": model,
-        "prompt": prompt,
-        "stream": False,
-        "format": "json",
-    }
-
-    req = request.Request(
-        endpoint,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-
-    try:
-        with request.urlopen(req, timeout=12) as resp:
-            raw = resp.read().decode("utf-8")
-        outer = json.loads(raw)
-        text = outer.get("response", "{}")
-        parsed = json.loads(text)
-
-        out = {
-            "what": str(parsed.get("what", "N/A")),
-            "when": str(parsed.get("when", "N/A")),
-            "where": str(parsed.get("where", f"{asset_name} ({subsystem})")),
-            "who": str(parsed.get("who", "Field Operator")),
-            "why": str(parsed.get("why", "N/A")),
-            "standardized_5w": str(parsed.get("standardized_5w", "N/A")),
-            "llm_model": f"{model} (local)",
-        }
-        return True, out, ""
-    except (error.URLError, TimeoutError, json.JSONDecodeError, error.HTTPError, ValueError) as ex:
-        return False, {}, str(ex)
-
-
-def call_remote_mistral_5w(user_text: str, asset_name: str, subsystem: str, endpoint: str, model: str, api_key: str = ""):
-    """Call remote API endpoint for 5W standardization (cloud deployment mode)."""
-    prompt = (
-        "You are a maintenance assistant. Convert the user note into strict 5W fields. "
-        "Return ONLY valid JSON with keys: what, when, where, who, why, standardized_5w. "
-        f"Asset: {asset_name} | Subsystem: {subsystem}. User note: {user_text}"
-    )
+    user_prompt = f"Asset: {asset_name} | Subsystem: {subsystem}. User note: {user_text}"
 
     payload = {
         "model": model,
-        "prompt": prompt,
-        "stream": False,
-        "format": "json",
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0.2,
     }
-    headers = {"Content-Type": "application/json"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+    }
 
     req = request.Request(
         endpoint,
@@ -405,16 +368,11 @@ def call_remote_mistral_5w(user_text: str, asset_name: str, subsystem: str, endp
     )
 
     try:
-        with request.urlopen(req, timeout=18) as resp:
+        with request.urlopen(req, timeout=22) as resp:
             raw = resp.read().decode("utf-8")
         outer = json.loads(raw)
-
-        # Accept either direct 5W JSON or wrapped `response` JSON string.
-        if all(k in outer for k in ["what", "when", "where", "who", "why", "standardized_5w"]):
-            parsed = outer
-        else:
-            text = outer.get("response", "{}")
-            parsed = json.loads(text)
+        content = outer.get("choices", [{}])[0].get("message", {}).get("content", "{}")
+        parsed = json.loads(content)
 
         out = {
             "what": str(parsed.get("what", "N/A")),
@@ -423,10 +381,10 @@ def call_remote_mistral_5w(user_text: str, asset_name: str, subsystem: str, endp
             "who": str(parsed.get("who", "Field Operator")),
             "why": str(parsed.get("why", "N/A")),
             "standardized_5w": str(parsed.get("standardized_5w", "N/A")),
-            "llm_model": f"{model} (remote API)",
+            "llm_model": f"{model} (OpenAI)",
         }
         return True, out, ""
-    except (error.URLError, TimeoutError, json.JSONDecodeError, error.HTTPError, ValueError) as ex:
+    except (error.URLError, TimeoutError, json.JSONDecodeError, error.HTTPError, ValueError, KeyError, IndexError) as ex:
         return False, {}, str(ex)
 
 
@@ -772,46 +730,39 @@ def main():
     online_mode = bool(st.session_state.get("_online_mode", False))
 
     if online_mode:
-        st.sidebar.caption("Online mode: use remote API endpoint (for Streamlit Cloud).")
-        llm_source = "remote_api"
+        st.sidebar.caption("Online mode: use ChatGPT API (for Streamlit Cloud).")
+        llm_source = "openai_api"
     else:
         llm_source = st.sidebar.radio(
             "LLM source",
-            ["mock", "local_mistral", "remote_api"],
+            ["mock", "openai_api"],
             index=0,
             key="llm_source_radio",
             format_func=lambda x: {
                 "mock": "Mock (offline)",
-                "local_mistral": "Local Mistral (Ollama)",
-                "remote_api": "Remote Mistral API",
+                "openai_api": "ChatGPT API",
             }[x],
         )
 
-    use_local_mistral = llm_source == "local_mistral"
-    use_remote_api = llm_source == "remote_api"
+    use_openai_api = llm_source == "openai_api"
 
-    local_mistral_model = "mistral"
-    local_mistral_endpoint = "http://localhost:11434/api/generate"
-    remote_api_model = "mistral"
-    remote_api_endpoint = ""
-    remote_api_key = ""
+    openai_model = "gpt-4o-mini"
+    openai_endpoint = "https://api.openai.com/v1/chat/completions"
+    openai_api_key = ""
 
-    if use_local_mistral:
-        local_mistral_model = st.sidebar.text_input("Local model", value="mistral", key="local_model_input")
-        local_mistral_endpoint = st.sidebar.text_input("Local endpoint", value="http://localhost:11434/api/generate", key="local_endpoint_input")
-
-    if use_remote_api:
-        remote_api_model = st.sidebar.text_input("API model", value="mistral", key="remote_model_input")
-        remote_api_endpoint = st.sidebar.text_input(
-            "API endpoint",
-            value=get_secret_or_default("MISTRAL_API_ENDPOINT", "https://your-api-endpoint/v1/mistral") if online_mode else "",
-            key="remote_endpoint_input",
+    if use_openai_api:
+        st.sidebar.caption("官方 API 沒有免費額度，預設使用較低成本模型 gpt-4o-mini。")
+        openai_model = st.sidebar.text_input("OpenAI model", value=get_secret_or_default("OPENAI_MODEL", "gpt-4o-mini"), key="openai_model_input")
+        openai_endpoint = st.sidebar.text_input(
+            "OpenAI endpoint",
+            value=get_secret_or_default("OPENAI_API_ENDPOINT", "https://api.openai.com/v1/chat/completions"),
+            key="openai_endpoint_input",
         )
-        remote_api_key = st.sidebar.text_input(
-            "API key",
-            value=get_secret_or_default("MISTRAL_API_KEY", "") if online_mode else "",
+        openai_api_key = st.sidebar.text_input(
+            "OpenAI API key",
+            value=get_secret_or_default("OPENAI_API_KEY", ""),
             type="password",
-            key="remote_api_key_input",
+            key="openai_api_key_input",
         )
 
     st.sidebar.markdown("---")
@@ -963,30 +914,21 @@ def main():
 
         if st.button("生成 5W", type="primary", use_container_width=True):
             user_note = st.session_state.get("notif_assist_editor", "")
-            if use_local_mistral:
-                ok, result_5w, err = call_local_mistral_5w(
+            if use_openai_api and openai_api_key.strip() and openai_endpoint.strip():
+                ok, result_5w, err = call_openai_chatgpt_5w(
                     user_note,
                     selected_name,
                     selected_asset["subsystem"],
-                    endpoint=local_mistral_endpoint,
-                    model=local_mistral_model,
+                    model=openai_model,
+                    api_key=openai_api_key.strip(),
+                    endpoint=openai_endpoint.strip(),
                 )
                 if not ok:
-                    st.warning(f"本機 Mistral 呼叫失敗，改用 mock。原因: {err}")
-                    result_5w = mock_mistral_5w(user_note, selected_name, selected_asset["subsystem"])
-            elif use_remote_api and remote_api_endpoint.strip():
-                ok, result_5w, err = call_remote_mistral_5w(
-                    user_note,
-                    selected_name,
-                    selected_asset["subsystem"],
-                    endpoint=remote_api_endpoint.strip(),
-                    model=remote_api_model,
-                    api_key=remote_api_key,
-                )
-                if not ok:
-                    st.warning(f"Remote API 呼叫失敗，改用 mock。原因: {err}")
+                    st.warning(f"ChatGPT API 呼叫失敗，改用 mock。原因: {err}")
                     result_5w = mock_mistral_5w(user_note, selected_name, selected_asset["subsystem"])
             else:
+                if use_openai_api:
+                    st.warning("OpenAI API key 或 endpoint 未設定，改用 mock。")
                 result_5w = mock_mistral_5w(user_note, selected_name, selected_asset["subsystem"])
 
             fivew_df = pd.DataFrame(
