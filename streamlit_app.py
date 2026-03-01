@@ -523,14 +523,30 @@ def build_sap_payload(asset: pd.Series, notification_structured: dict, risk_scor
 
 
 def build_layout_positions(assets_df: pd.DataFrame) -> pd.DataFrame:
-    """Mock facility layout coordinates grouped by subsystem zones."""
-    zone_x = {"Electrical": 12, "Rotating": 45, "Process": 78}
+    """Mock facility layout coordinates with semi-realistic, non-uniform equipment placement."""
+    manual_layout = {
+        "TR1": (9, 78), "TR2": (17, 70), "SW1": (12, 57), "SW2": (19, 48),
+        "T1": (43, 76), "C1": (55, 72), "C2": (50, 58), "P1": (36, 45), "P2": (46, 36),
+        "S1": (74, 74), "S2": (82, 64), "V1": (72, 52), "V2": (86, 46), "HX1": (78, 34), "HX2": (88, 28),
+    }
+    zone_bounds = {
+        "Electrical": (8, 24, 40, 84),
+        "Rotating": (32, 58, 30, 84),
+        "Process": (66, 90, 24, 82),
+    }
+
+    rng = np.random.default_rng(2026)
     rows = []
-    for subsystem in ["Electrical", "Rotating", "Process"]:
-        subset = assets_df[assets_df["subsystem"] == subsystem].reset_index(drop=True)
-        y_vals = np.linspace(15, 85, len(subset))
-        for i, r in subset.iterrows():
-            rows.append({"asset_id": r["asset_id"], "asset_name": r["asset_name"], "subsystem": subsystem, "x": zone_x[subsystem], "y": float(y_vals[i])})
+    for _, r in assets_df.iterrows():
+        aid = str(r["asset_id"])
+        subsystem = str(r["subsystem"])
+        if aid in manual_layout:
+            x, y = manual_layout[aid]
+        else:
+            x0, x1, y0, y1 = zone_bounds.get(subsystem, (20, 80, 20, 80))
+            x = float(rng.uniform(x0, x1))
+            y = float(rng.uniform(y0, y1))
+        rows.append({"asset_id": aid, "asset_name": r["asset_name"], "subsystem": subsystem, "x": float(x), "y": float(y)})
     return pd.DataFrame(rows)
 
 
@@ -548,6 +564,39 @@ def cascade_impact(graph: nx.DiGraph, source: str, cutoff: int = 4) -> dict:
         if max_strength > 0:
             impact[node] = max_strength
     return impact
+
+
+def build_direct_causal_dot(graph: nx.DiGraph, model_df: pd.DataFrame, source_id: str, max_depth: int = 2) -> str:
+    """Build a compact Graphviz DOT for direct/near-direct causal propagation."""
+    dist = nx.single_source_shortest_path_length(graph, source=source_id, cutoff=max_depth)
+    nodes = set(dist.keys())
+    if source_id not in nodes:
+        nodes.add(source_id)
+
+    rows = [
+        "digraph G {",
+        "rankdir=LR;",
+        'graph [bgcolor="#ffffff"];',
+        'node [shape=box, style="rounded,filled", fillcolor="#F8FAFF", color="#6B7280"];',
+        'edge [color="#9CA3AF"];',
+    ]
+    risk_map = model_df.set_index("asset_id")["risk_score"].to_dict()
+    name_map = model_df.set_index("asset_id")["asset_name"].to_dict()
+
+    for n in nodes:
+        risk = float(risk_map.get(n, 0.0))
+        fill = "#FECACA" if risk >= 70 else ("#FEF3C7" if risk >= 35 else "#DCFCE7")
+        pen = "2.2" if n == source_id else "1.2"
+        label = f"{name_map.get(n, n)}\nRisk:{risk:.1f}"
+        rows.append(f'"{n}" [label="{label}", fillcolor="{fill}", penwidth={pen}];')
+
+    for u, v, data in graph.edges(data=True):
+        if u in nodes and v in nodes:
+            w = float(data.get("propagation_weight", 0.0))
+            rows.append(f'"{u}" -> "{v}" [label="{w:.2f}"];')
+
+    rows.append("}")
+    return "\n".join(rows)
 
 
 def traffic_light_text(value: float, green: float, yellow: float) -> str:
@@ -882,6 +931,10 @@ def main():
         with top_right:
             st.markdown("#### Voice Input (Mock Only)")
             st.caption("因為真實語音要付費token, 所以僅呈現模擬")
+            if hasattr(st, "audio_input"):
+                st.audio_input("錄音（僅展示）")
+            else:
+                st.file_uploader("上傳語音檔（僅展示）", type=["wav", "mp3", "m4a"], key="audio_mock_upload")
             if st.button("使用模擬語音轉寫", use_container_width=True):
                 mock_text = f"Operator voice note: vibration increased on {selected_name} during high load; inspect bearing and alignment."
                 _draft_set(mock_text)
@@ -972,10 +1025,22 @@ def main():
             )
             labels = (
                 alt.Chart(layout_df)
-                .mark_text(dy=-12, fontSize=11)
-                .encode(x="x:Q", y="y:Q", text=alt.Text("current_health:Q", format=".1f"))
+                .mark_text(dy=-15, fontSize=10, color="#1F2937")
+                .encode(x="x:Q", y="y:Q", text=alt.Text("asset_name:N"))
             )
             st.altair_chart((layout_chart + labels), use_container_width=True)
+            st.dataframe(
+                layout_df[["asset_name", "subsystem", "x", "y", "current_health", "risk_score"]]
+                .sort_values(["subsystem", "asset_name"])
+                .reset_index(drop=True),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+        st.markdown("#### Direct Causal Graph")
+        causal_depth = st.slider("Propagation depth", min_value=1, max_value=4, value=2, key="causal_depth_slider")
+        dot = build_direct_causal_dot(graph, model_df, selected_asset["asset_id"], max_depth=causal_depth)
+        st.graphviz_chart(dot, use_container_width=True)
 
         st.markdown("#### Impact Simulator（點選資產 + 健康拉霸）")
         sim_asset_name = st.selectbox(
