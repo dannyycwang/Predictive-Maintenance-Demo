@@ -287,12 +287,21 @@ def notification_templates(subsystem: str):
 
 
 def notification_keywords(subsystem: str):
-    """Short keyword recommendations for operators."""
-    common = ["vibration", "temperature", "noise", "bearing", "leak", "alignment"]
+    """Short keyword recommendations for operators (including practical units)."""
+    common = [
+        "vibration", "noise", "bearing", "alignment", "temperature", "pressure",
+        "leak", "lubrication", "85°C", "2.5 mm/s", "6 bar", "delta +12°C"
+    ]
     if subsystem == "Electrical":
-        return ["hotspot", "insulation", "trip", "temperature", "switchgear"]
+        return [
+            "hotspot", "insulation", "switchgear", "trip", "overload", "partial discharge",
+            "95°C", "450V", "120A", "THD 8%"
+        ]
     if subsystem == "Process":
-        return ["pressure", "leak", "valve", "flow", "separator"]
+        return [
+            "pressure", "flow", "separator", "valve", "leak", "corrosion",
+            "8 bar", "120 m3/h", "45°C", "DP +0.8 bar"
+        ]
     return common
 
 
@@ -678,6 +687,7 @@ def main():
         <style>
             .oracle-card {padding: 0.65rem 0.9rem; border-radius: 0.8rem; border: 1px solid rgba(49,51,63,0.2); background: rgba(250,250,252,0.8);}
             .oracle-sub {color: #667085; margin-top: -0.4rem; margin-bottom: 0.6rem;}
+            .gen-note {color:#667085;font-size:0.9rem;margin-top:-0.3rem;}
         </style>
         """,
         unsafe_allow_html=True,
@@ -744,6 +754,10 @@ def main():
         st.session_state["main_notification_text"] = notification_default
     if "notif_assist_editor" not in st.session_state:
         st.session_state["notif_assist_editor"] = st.session_state["main_notification_text"]
+    if "fivew_review" not in st.session_state:
+        st.session_state["fivew_review"] = {}
+    if "fivew_finalized" not in st.session_state:
+        st.session_state["fivew_finalized"] = False
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("Active Notification (Pipeline Input)")
@@ -949,7 +963,13 @@ def main():
 
         st.text_area("Draft text", height=200, key="notif_assist_editor", label_visibility="collapsed")
 
-        if st.button("生成 5W", type="primary", use_container_width=True):
+        st.markdown("#### 5W Generator")
+        st.markdown("<div class='gen-note'>先生成草稿，再人工編修，最後送出鎖定。</div>", unsafe_allow_html=True)
+        gen_cols = st.columns([10, 1])
+        gen_cols[0].text_input("", value="", placeholder="Ask a question...", key="fivew_trigger_input", label_visibility="collapsed")
+        generate_clicked = gen_cols[1].button("➤", key="generate_5w_btn", use_container_width=True)
+
+        if generate_clicked:
             user_note = st.session_state.get("notif_assist_editor", "")
             if use_openai_api and openai_api_key.strip() and openai_endpoint.strip():
                 ok, result_5w, err = call_openai_chatgpt_5w(
@@ -968,26 +988,40 @@ def main():
                     st.warning("OpenAI API key 或 endpoint 未設定，改用 mock。")
                 result_5w = mock_mistral_5w(user_note, selected_name, selected_asset["subsystem"])
 
-            fivew_df = pd.DataFrame(
-                {
-                    "item": ["WHAT", "WHEN", "WHERE", "WHO", "WHY", "MODEL"],
-                    "content": [
-                        str(result_5w["what"]),
-                        str(result_5w["when"]),
-                        str(result_5w["where"]),
-                        str(result_5w["who"]),
-                        str(result_5w["why"]),
-                        str(result_5w.get("llm_model", "mock")),
-                    ],
-                }
-            )
-            st.dataframe(fivew_df, use_container_width=True, hide_index=True)
+            st.session_state["fivew_review"] = {
+                "what": str(result_5w.get("what", "")),
+                "when": str(result_5w.get("when", "")),
+                "where": str(result_5w.get("where", "")),
+                "who": str(result_5w.get("who", "")),
+                "why": str(result_5w.get("why", "")),
+                "standardized_5w": str(result_5w.get("standardized_5w", "")),
+                "llm_model": str(result_5w.get("llm_model", "mock")),
+            }
+            st.session_state["fivew_finalized"] = False
 
-            st.markdown("#### 5W Standardized Text")
-            if stream_render:
-                typewriter_render(result_5w["standardized_5w"], speed_ms=36)
-            else:
-                st.code(result_5w["standardized_5w"], language="text")
+        review = st.session_state.get("fivew_review", {})
+        if review:
+            locked = bool(st.session_state.get("fivew_finalized", False))
+            st.markdown("#### 5W Review (Human-in-the-loop)")
+            c1, c2 = st.columns(2)
+            review["what"] = c1.text_input("WHAT", value=review.get("what", ""), disabled=locked)
+            review["when"] = c2.text_input("WHEN", value=review.get("when", ""), disabled=locked)
+            c3, c4 = st.columns(2)
+            review["where"] = c3.text_input("WHERE", value=review.get("where", ""), disabled=locked)
+            review["who"] = c4.text_input("WHO", value=review.get("who", ""), disabled=locked)
+            review["why"] = st.text_input("WHY", value=review.get("why", ""), disabled=locked)
+            review["standardized_5w"] = st.text_area("Standardized 5W", value=review.get("standardized_5w", ""), height=160, disabled=locked)
+            st.caption(f"Model: {review.get('llm_model', 'mock')}")
+
+            st.session_state["fivew_review"] = review
+
+            if stream_render and not locked:
+                st.markdown("##### Streaming Preview")
+                typewriter_render(review.get("standardized_5w", ""), speed_ms=28)
+
+            if st.button("送出並鎖定", key="finalize_5w_btn", use_container_width=True, disabled=locked):
+                st.session_state["fivew_finalized"] = True
+                st.success("5W 已送出並鎖定。")
 
     with tabs[2]:
         st.subheader("Asset Risk Graph")
@@ -1023,13 +1057,6 @@ def main():
                 .encode(x="x:Q", y="y:Q", text=alt.Text("asset_name:N"))
             )
             st.altair_chart((layout_chart + labels), use_container_width=True)
-            st.dataframe(
-                layout_df[["asset_name", "subsystem", "x", "y", "current_health", "risk_score"]]
-                .sort_values(["subsystem", "asset_name"])
-                .reset_index(drop=True),
-                use_container_width=True,
-                hide_index=True,
-            )
 
         st.markdown("#### Direct Causal Graph")
         causal_depth = st.slider("Propagation depth", min_value=1, max_value=4, value=2, key="causal_depth_slider")
