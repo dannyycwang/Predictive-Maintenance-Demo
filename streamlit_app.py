@@ -680,7 +680,7 @@ def get_secret_or_default(key: str, default: str = "") -> str:
 # ------------------------------
 
 def main():
-    st.set_page_config(page_title="ORACLE – Maintenance Decision Intelligence", page_icon="🛰️", layout="wide")
+    st.set_page_config(page_title="CADENCE – Coordinated Asset Decision Engine", page_icon="🛰️", layout="wide")
 
     st.markdown(
         """
@@ -688,13 +688,25 @@ def main():
             .oracle-card {padding: 0.65rem 0.9rem; border-radius: 0.8rem; border: 1px solid rgba(49,51,63,0.2); background: rgba(250,250,252,0.8);}
             .oracle-sub {color: #667085; margin-top: -0.4rem; margin-bottom: 0.6rem;}
             .gen-note {color:#667085;font-size:0.9rem;margin-top:-0.3rem;}
+            .cadence-wrap {text-align:center; margin-bottom:0.35rem;}
+            .cadence-main {font-size:2.2rem; font-weight:800; letter-spacing:0.02em; margin-bottom:0.2rem;}
+            .cadence-sub {font-size:1.2rem; margin-bottom:0.2rem;}
+            .cadence-tag {font-size:0.98rem; color:#667085;}
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-    st.markdown("## ORACLE · Maintenance Decision Intelligence")
-    st.markdown("<div class='oracle-sub'>Synthetic decision intelligence demo: Notification → Structuring → Graph Risk → PdM Signals → Prescriptive Action → Standards Rationale → SAP JSON.</div>", unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class='cadence-wrap'>
+          <div class='cadence-main'>CADENCE</div>
+          <div class='cadence-sub'>Coordinated Asset Decision Engine</div>
+          <div class='cadence-tag'>- Aligning Maintenance with Operational Rhythm</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     with st.sidebar:
         st.header("Controls")
