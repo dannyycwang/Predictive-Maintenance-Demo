@@ -773,7 +773,7 @@ def main():
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("Active Notification (Pipeline Input)")
-    st.sidebar.caption("目前風險評分/標準檢索/SAP 匯出都會使用這段通知文字。請到 Notification Assist 分頁編輯。")
+    st.sidebar.caption("Risk scoring, standards retrieval, and SAP export all use this notification text.")
     st.sidebar.text_area(
         "Active Notification",
         value=st.session_state["main_notification_text"],
@@ -814,18 +814,19 @@ def main():
     openai_api_key = ""
 
     if use_openai_api:
-        st.sidebar.caption("官方 API 沒有免費額度，預設使用較低成本模型 gpt-4o-mini。")
+        st.sidebar.caption("OpenAI API is paid. Default model is lower-cost gpt-4o-mini.")
         openai_model = st.sidebar.text_input("OpenAI model", value=get_secret_or_default("OPENAI_MODEL", "gpt-4o-mini"), key="openai_model_input")
         openai_endpoint = st.sidebar.text_input(
             "OpenAI endpoint",
             value=get_secret_or_default("OPENAI_API_ENDPOINT", "https://api.openai.com/v1/chat/completions"),
             key="openai_endpoint_input",
         )
-        openai_api_key = st.sidebar.text_input(
-            "OpenAI API key",
-            value=get_secret_or_default("OPENAI_API_KEY", ""),
-            type="password",
-            key="openai_api_key_input",
+        openai_api_key = get_secret_or_default("OPENAI_API_KEY", "")
+        st.sidebar.text_input(
+            "OpenAI API key (managed)",
+            value=("Configured in secrets" if openai_api_key else "Not configured"),
+            disabled=True,
+            key="openai_api_key_locked",
         )
 
     st.sidebar.markdown("---")
@@ -879,7 +880,7 @@ def main():
 
     with tabs[0]:
         st.subheader("Overview")
-        st.info("頁面說明：展示整體風險態勢、通知文字結構化結果，讓決策者先快速掌握目前資產狀態。")
+        
 
         st.markdown("---")
         c1, c2 = st.columns(2)
@@ -892,13 +893,13 @@ def main():
         kpi[2].metric("Predicted Time-to-Threshold (days)", f"{selected_asset['predicted_time_to_threshold']:.1f}")
         kpi[3].metric("Anomaly Score", f"{latest_row['anomaly_score']:.2f}", delta=f"{anomaly_delta:+.2f}")
         kpi[4].metric("Estimated Mobilization Cost", f"${selected_asset['mobilization_cost']:,.0f}")
-        st.caption("Summary 使用最新一筆資料；Delta = 最新值 - 倒數第二筆。Risk formula: risk_score = (systemic_priority_normalized*0.5 + (100-current_health)/100*0.3 + anomaly_score_normalized*0.2) * 100")
+        st.caption("Summary uses latest record; Delta = latest - previous. Risk formula: risk_score = (systemic_priority_normalized*0.5 + (100-current_health)/100*0.3 + anomaly_score_normalized*0.2) * 100")
 
         overview_cols = ["asset_id", "asset_name", "subsystem", "criticality", "current_health", "anomaly_score", "systemic_priority", "risk_score"]
         risk_rank = model_df[overview_cols].sort_values(["subsystem", "risk_score"], ascending=[True, False]).copy()
         risk_rank["risk_level"] = np.where(risk_rank["risk_score"] > 40, "High (>40)", "Normal (<=40)")
         risk_rank_chart = sanitize_chart_df(risk_rank, ["risk_score", "asset_name", "subsystem"]) 
-        with st.expander("查看明細資料表（Asset risk rank）", expanded=False):
+        with st.expander("View detailed asset risk table", expanded=False):
             st.dataframe(risk_rank, use_container_width=True, hide_index=True)
 
         st.markdown("#### Subsystem Risk Panels")
@@ -929,8 +930,8 @@ def main():
                     st.altair_chart(panel_chart, use_container_width=True)
 
         st.markdown("#### Notification Structuring")
-        st.markdown(f"系統判斷目前通知最可能是 **{parsed_notification['suspected_failure_type']}**，疑似位置為 **{parsed_notification['suspected_component']}**，置信度 **{parsed_notification['confidence']:.2f}**。")
-        with st.expander("查看通知結構化原始輸出", expanded=False):
+        st.markdown(f"Most likely failure type: **{parsed_notification['suspected_failure_type']}** | Suspected component: **{parsed_notification['suspected_component']}** | Confidence: **{parsed_notification['confidence']:.2f}**")
+        with st.expander("View structured notification output", expanded=False):
             left, right = st.columns(2)
             left.json(parsed_notification)
             right.dataframe(
@@ -959,24 +960,24 @@ def main():
 
         with top_right:
             st.markdown("#### Voice Input (Mock Only)")
-            st.caption("因為真實語音要付費token, 所以僅呈現模擬")
+            st.caption("Real voice transcription uses paid tokens, so this demo uses simulation only.")
             if hasattr(st, "audio_input"):
-                st.audio_input("錄音（僅展示）")
+                st.audio_input("Record audio (demo only)")
             else:
-                st.file_uploader("上傳語音檔（僅展示）", type=["wav", "mp3", "m4a"], key="audio_mock_upload")
-            if st.button("使用模擬語音轉寫", use_container_width=True):
+                st.file_uploader("Upload audio (demo only)", type=["wav", "mp3", "m4a"], key="audio_mock_upload")
+            if st.button("Use simulated voice transcript", use_container_width=True):
                 mock_text = f"Operator voice note: vibration increased on {selected_name} during high load; inspect bearing and alignment."
                 _draft_set(mock_text)
-                st.success("已套用模擬語音內容。")
+                st.success("Applied simulated voice content.")
 
         head_l, head_m, head_r = st.columns([2.2, 8, 1.4])
         head_l.markdown("#### Draft · 5W Generator")
         head_m.text_input("5W prompt", value="", placeholder="Ask a question...", key="fivew_trigger_input", label_visibility="collapsed")
         generate_clicked = head_r.button("➤", key="generate_5w_btn", use_container_width=True)
 
-        st.markdown("<div class='gen-note'>先生成草稿，再人工編修，最後送出鎖定。</div>", unsafe_allow_html=True)
+        st.markdown("<div class='gen-note'>Generate a draft, edit it (human-in-the-loop), then submit to lock.</div>", unsafe_allow_html=True)
         st.text_area("Draft text", height=200, key="notif_assist_editor", label_visibility="collapsed")
-        st.button("清空 Draft", key="clear_draft_btn", on_click=_draft_clear, use_container_width=True)
+        st.button("Clear Draft", key="clear_draft_btn", on_click=_draft_clear, use_container_width=True)
 
         if generate_clicked:
             user_note = st.session_state.get("notif_assist_editor", "")
@@ -990,11 +991,11 @@ def main():
                     endpoint=openai_endpoint.strip(),
                 )
                 if not ok:
-                    st.warning(f"ChatGPT API 呼叫失敗，改用 mock。原因: {err}。若是 429，請稍後重試或確認 billing/quota。")
+                    st.warning(f"ChatGPT API call failed, switching to mock. Reason: {err}. If 429, retry later or check billing/quota.")
                     result_5w = mock_mistral_5w(user_note, selected_name, selected_asset["subsystem"])
             else:
                 if use_openai_api:
-                    st.warning("OpenAI API key 或 endpoint 未設定，改用 mock。")
+                    st.warning("OpenAI API key or endpoint not configured; switching to mock.")
                 result_5w = mock_mistral_5w(user_note, selected_name, selected_asset["subsystem"])
 
             st.session_state["fivew_review"] = {
@@ -1011,7 +1012,7 @@ def main():
         review = st.session_state.get("fivew_review", {})
         if review:
             locked = bool(st.session_state.get("fivew_finalized", False))
-            st.markdown("#### 5W Review (Human-in-the-loop)")
+            st.markdown("#### 5W Review (Human in the Loop)")
             c1, c2 = st.columns(2)
             review["what"] = c1.text_input("WHAT", value=review.get("what", ""), disabled=locked)
             review["when"] = c2.text_input("WHEN", value=review.get("when", ""), disabled=locked)
@@ -1028,13 +1029,13 @@ def main():
                 st.markdown("##### Streaming Preview")
                 typewriter_render(review.get("standardized_5w", ""), speed_ms=28)
 
-            if st.button("送出並鎖定", key="finalize_5w_btn", use_container_width=True, disabled=locked):
+            if st.button("Submit and Lock", key="finalize_5w_btn", use_container_width=True, disabled=locked):
                 st.session_state["fivew_finalized"] = True
-                st.success("5W 已送出並鎖定。")
+                st.success("5W submitted and locked.")
 
     with tabs[2]:
         st.subheader("Asset Risk Graph")
-        st.info("頁面說明：先看廠務 layout 與各資產健康分數，再模擬單台健康下滑對下游影響台數的變化。")
+        
 
         layout_df = build_layout_positions(assets_df).merge(
             model_df[["asset_id", "asset_name", "subsystem", "risk_score", "current_health"]],
@@ -1043,7 +1044,7 @@ def main():
         )
         layout_df = sanitize_chart_df(layout_df, ["x", "y", "asset_name", "current_health", "subsystem"])
 
-        st.markdown("#### Facility Layout（顯示當前健康分數）")
+        st.markdown("#### Facility Layout (Current Health)")
         if layout_df.empty:
             st.warning("No valid layout data available.")
         else:
@@ -1072,9 +1073,9 @@ def main():
         dot = build_direct_causal_dot(graph, model_df, selected_asset["asset_id"], max_depth=causal_depth)
         st.graphviz_chart(dot, use_container_width=True)
 
-        st.markdown("#### Impact Simulator（點選資產 + 健康拉霸）")
+        st.markdown("#### Impact Simulator")
         sim_asset_name = st.selectbox(
-            "選擇資產（模擬點擊）",
+            "Select asset (simulation)",
             model_df["asset_name"].tolist(),
             index=int(model_df[model_df["asset_id"] == selected_asset["asset_id"]].index[0]),
             key="impact_sim_asset",
@@ -1085,7 +1086,7 @@ def main():
 
         current_h = float(sim_asset["current_health"])
         sim_health = st.slider(
-            "模擬健康分數（往下拉看影響變化）",
+            "Simulated health score",
             min_value=0.0,
             max_value=100.0,
             value=float(round(current_h, 1)),
@@ -1103,8 +1104,7 @@ def main():
         c_imp3.metric("Simulated health", f"{sim_health:.1f}", delta=f"{sim_health - current_h:+.1f}")
 
         st.markdown(
-            f"資產 **{sim_asset_name}** 目前健康 **{current_h:.1f}**。當健康下滑至 **{sim_health:.1f}** 時，"
-            f"預估可影響台數由 **{base_impacted_count}** 下降為 **{impacted_sim}**。"
+            f"Asset **{sim_asset_name}** current health is **{current_h:.1f}**. When health drops to **{sim_health:.1f}**, estimated impacted downstream assets change from **{base_impacted_count}** to **{impacted_sim}**."
         )
 
         impact_table = layout_df[["asset_id", "asset_name", "subsystem"]].copy()
@@ -1147,7 +1147,7 @@ def main():
             )
             st.altair_chart(impact_compare, use_container_width=True)
 
-        with st.expander("查看 systemic priority 與 adjacency 詳細資料", expanded=False):
+        with st.expander("View systemic priority and adjacency details", expanded=False):
             st.dataframe(
                 priority_df[["asset_id", "asset_name", "out_degree", "betweenness", "systemic_priority"]],
                 use_container_width=True,
@@ -1163,14 +1163,14 @@ def main():
 
     with tabs[3]:
         st.subheader("Health & PdM Signals")
-        st.info("頁面說明：查看 90 天健康趨勢、異常分數和操作模式變化，輔助預估達到門檻的剩餘天數。")
-        st.markdown(f"目前 **{selected_name}** 健康值最新為 **{latest_row['health_index']:.1f}**，最近一天變化 **{health_delta:+.2f}**；預估到達門檻剩餘 **{selected_asset['predicted_time_to_threshold']:.1f}** 天。")
+        
+        st.markdown(f"For **{selected_name}**, latest health is **{latest_row['health_index']:.1f}** with daily change **{health_delta:+.2f}**; estimated time to threshold: **{selected_asset['predicted_time_to_threshold']:.1f}** days.")
 
         asset_ts = ts_df[ts_df["asset_id"] == selected_asset["asset_id"]].sort_values("date").reset_index(drop=True).copy()
         asset_ts = sanitize_chart_df(asset_ts, ["date", "health_index", "anomaly_score"])
         threshold = 60
 
-        st.caption("可用滑桿模擬時間推進，觀察單一機台健康值下降速度；虛線為二次擬合趨勢。")
+        st.caption("Use the slider to simulate timeline progression and observe health decline; dashed line shows quadratic trend.")
         min_sim = 3 if len(asset_ts) >= 3 else 1
         default_sim = len(asset_ts) if len(asset_ts) > 0 else 1
         sim_day = st.slider("Simulation Day (time progression)", min_value=min_sim, max_value=default_sim, value=default_sim, step=1)
@@ -1223,7 +1223,7 @@ def main():
             )
             st.altair_chart(anomaly, use_container_width=True)
 
-        with st.expander("查看最近 10 筆健康訊號資料", expanded=False):
+        with st.expander("View latest 10 health records", expanded=False):
             st.dataframe(
                 sim_ts[["date", "operating_mode", "health_index", "health_quad_fit", "anomaly_score"]].tail(10).sort_values("date", ascending=False),
                 use_container_width=True,
@@ -1232,10 +1232,10 @@ def main():
 
     with tabs[4]:
         st.subheader("Decision Orchestration")
-        st.info("頁面說明：比較 4 種處置策略在風險降低、停機、成本與殘餘風險上的綜合分數，給出推薦方案。")
-        st.markdown(f"依目前風險條件，建議策略傾向 **{options_df.iloc[0]['option']}**，可在成本與殘餘風險間取得較佳平衡。")
+        
+        st.markdown(f"Based on current conditions, the recommended strategy is **{options_df.iloc[0]['option']}** for a balanced trade-off between cost and residual risk.")
 
-        with st.expander("查看策略評分明細", expanded=False):
+        with st.expander("View strategy scoring details", expanded=False):
             st.dataframe(options_df, use_container_width=True, hide_index=True)
         options_df_chart = sanitize_chart_df(options_df, ["option", "decision_score", "residual_risk"])
 
@@ -1273,11 +1273,11 @@ def main():
 
     with tabs[5]:
         st.subheader("Standards (RAG) & Explainability")
-        st.info("頁面說明：依資產與疑似故障型態擷取標準片段，並說明推薦決策與風險訊號之間的因果關聯。")
+        
 
         st.markdown("#### Cited Guidance")
-        st.markdown("系統已根據子系統與故障假設自動挑選最相關的 1–2 條標準節錄。")
-        with st.expander("查看引用標準內容", expanded=False):
+        st.markdown("The system selected the most relevant 1–2 standards snippets based on subsystem and failure hypothesis.")
+        with st.expander("View cited standards", expanded=False):
             for snip in standards:
                 st.markdown(f"**{snip['title']}**")
                 st.write(snip["excerpt"])
@@ -1315,7 +1315,7 @@ def main():
 
     with tabs[6]:
         st.subheader("SAP Proposal Export")
-        st.info("頁面說明：輸出可交給 planner 審核的工單提案 JSON，含通知結構化內容、風險與推薦方案。")
+        
 
         st.json(sap_payload)
         st.download_button(
@@ -1338,7 +1338,7 @@ def main():
                 ],
             }
         )
-        with st.expander("查看 proposal key-value 明細", expanded=False):
+        with st.expander("View proposal key-value details", expanded=False):
             st.dataframe(preview, use_container_width=True, hide_index=True)
 
 
