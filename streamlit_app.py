@@ -680,7 +680,7 @@ def get_secret_or_default(key: str, default: str = "") -> str:
 # ------------------------------
 
 def main():
-    st.set_page_config(page_title="ORACLE – Maintenance Decision Intelligence", page_icon="🛰️", layout="wide")
+    st.set_page_config(page_title="CADENCE – Coordinated Asset Decision Engine", page_icon="🛰️", layout="wide")
 
     st.markdown(
         """
@@ -688,13 +688,25 @@ def main():
             .oracle-card {padding: 0.65rem 0.9rem; border-radius: 0.8rem; border: 1px solid rgba(49,51,63,0.2); background: rgba(250,250,252,0.8);}
             .oracle-sub {color: #667085; margin-top: -0.4rem; margin-bottom: 0.6rem;}
             .gen-note {color:#667085;font-size:0.9rem;margin-top:-0.3rem;}
+            .cadence-wrap {text-align:center; margin-bottom:0.35rem;}
+            .cadence-main {font-size:2.2rem; font-weight:800; letter-spacing:0.02em; margin-bottom:0.2rem;}
+            .cadence-sub {font-size:1.2rem; margin-bottom:0.2rem;}
+            .cadence-tag {font-size:0.98rem; color:#667085;}
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-    st.markdown("## ORACLE · Maintenance Decision Intelligence")
-    st.markdown("<div class='oracle-sub'>Synthetic decision intelligence demo: Notification → Structuring → Graph Risk → PdM Signals → Prescriptive Action → Standards Rationale → SAP JSON.</div>", unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class='cadence-wrap'>
+          <div class='cadence-main'>CADENCE</div>
+          <div class='cadence-sub'>Coordinated Asset Decision Engine</div>
+          <div class='cadence-tag'>- Aligning Maintenance with Operational Rhythm</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     with st.sidebar:
         st.header("Controls")
@@ -957,17 +969,14 @@ def main():
                 _draft_set(mock_text)
                 st.success("已套用模擬語音內容。")
 
-        head_l, head_r = st.columns([3, 1])
-        head_l.markdown("#### Draft")
-        head_r.button("清空 Draft", key="clear_draft_btn", on_click=_draft_clear, use_container_width=True)
+        head_l, head_m, head_r = st.columns([2.2, 8, 1.4])
+        head_l.markdown("#### Draft · 5W Generator")
+        head_m.text_input("5W prompt", value="", placeholder="Ask a question...", key="fivew_trigger_input", label_visibility="collapsed")
+        generate_clicked = head_r.button("➤", key="generate_5w_btn", use_container_width=True)
 
-        st.text_area("Draft text", height=200, key="notif_assist_editor", label_visibility="collapsed")
-
-        st.markdown("#### 5W Generator")
         st.markdown("<div class='gen-note'>先生成草稿，再人工編修，最後送出鎖定。</div>", unsafe_allow_html=True)
-        gen_cols = st.columns([10, 1])
-        gen_cols[0].text_input("", value="", placeholder="Ask a question...", key="fivew_trigger_input", label_visibility="collapsed")
-        generate_clicked = gen_cols[1].button("➤", key="generate_5w_btn", use_container_width=True)
+        st.text_area("Draft text", height=200, key="notif_assist_editor", label_visibility="collapsed")
+        st.button("清空 Draft", key="clear_draft_btn", on_click=_draft_clear, use_container_width=True)
 
         if generate_clicked:
             user_note = st.session_state.get("notif_assist_editor", "")
