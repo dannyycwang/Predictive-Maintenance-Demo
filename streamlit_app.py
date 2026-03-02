@@ -339,6 +339,32 @@ def mock_mistral_5w(user_text: str, asset_name: str, subsystem: str) -> dict:
 
 def call_openai_chatgpt_5w(user_text: str, asset_name: str, subsystem: str, model: str, api_key: str, endpoint: str = "https://api.openai.com/v1/chat/completions"):
     """Call OpenAI Chat Completions API to standardize operator notes into 5W JSON."""
+
+    def _parse_http_error(ex: error.HTTPError):
+        status = getattr(ex, "code", None)
+        retry_after = ""
+        try:
+            retry_after = ex.headers.get("Retry-After", "") if ex.headers else ""
+        except Exception:
+            retry_after = ""
+
+        body_msg = ""
+        try:
+            body_raw = ex.read().decode("utf-8")
+            body = json.loads(body_raw)
+            body_msg = str(body.get("error", {}).get("message", "")).strip()
+        except Exception:
+            body_msg = ""
+
+        if status == 429:
+            hint = "Rate limit or quota reached (HTTP 429)."
+            if retry_after:
+                hint += f" Retry-After={retry_after}s."
+            if body_msg:
+                hint += f" {body_msg}"
+            return hint
+        return f"HTTP {status}: {body_msg or str(ex)}"
+
     system_prompt = (
         "You are a maintenance assistant. Convert operator note into strict 5W fields. "
         "Return JSON object only with keys: what, when, where, who, why, standardized_5w."
@@ -360,32 +386,43 @@ def call_openai_chatgpt_5w(user_text: str, asset_name: str, subsystem: str, mode
         "Authorization": f"Bearer {api_key}",
     }
 
-    req = request.Request(
-        endpoint,
-        data=json.dumps(payload).encode("utf-8"),
-        headers=headers,
-        method="POST",
-    )
+    retries = [0.0, 1.5, 3.0]
+    for attempt, backoff_s in enumerate(retries, start=1):
+        if backoff_s > 0:
+            time.sleep(backoff_s)
 
-    try:
-        with request.urlopen(req, timeout=22) as resp:
-            raw = resp.read().decode("utf-8")
-        outer = json.loads(raw)
-        content = outer.get("choices", [{}])[0].get("message", {}).get("content", "{}")
-        parsed = json.loads(content)
+        req = request.Request(
+            endpoint,
+            data=json.dumps(payload).encode("utf-8"),
+            headers=headers,
+            method="POST",
+        )
+        try:
+            with request.urlopen(req, timeout=22) as resp:
+                raw = resp.read().decode("utf-8")
+            outer = json.loads(raw)
+            content = outer.get("choices", [{}])[0].get("message", {}).get("content", "{}")
+            parsed = json.loads(content)
 
-        out = {
-            "what": str(parsed.get("what", "N/A")),
-            "when": str(parsed.get("when", "N/A")),
-            "where": str(parsed.get("where", f"{asset_name} ({subsystem})")),
-            "who": str(parsed.get("who", "Field Operator")),
-            "why": str(parsed.get("why", "N/A")),
-            "standardized_5w": str(parsed.get("standardized_5w", "N/A")),
-            "llm_model": f"{model} (OpenAI)",
-        }
-        return True, out, ""
-    except (error.URLError, TimeoutError, json.JSONDecodeError, error.HTTPError, ValueError, KeyError, IndexError) as ex:
-        return False, {}, str(ex)
+            out = {
+                "what": str(parsed.get("what", "N/A")),
+                "when": str(parsed.get("when", "N/A")),
+                "where": str(parsed.get("where", f"{asset_name} ({subsystem})")),
+                "who": str(parsed.get("who", "Field Operator")),
+                "why": str(parsed.get("why", "N/A")),
+                "standardized_5w": str(parsed.get("standardized_5w", "N/A")),
+                "llm_model": f"{model} (OpenAI)",
+            }
+            return True, out, ""
+        except error.HTTPError as ex:
+            err_msg = _parse_http_error(ex)
+            if ex.code == 429 and attempt < len(retries):
+                continue
+            return False, {}, err_msg
+        except (error.URLError, TimeoutError, json.JSONDecodeError, ValueError, KeyError, IndexError) as ex:
+            return False, {}, str(ex)
+
+    return False, {}, "Unknown OpenAI API error"
 
 
 def compute_risk_score(systemic_priority_norm: float, current_health: float, anomaly_score: float):
@@ -924,7 +961,7 @@ def main():
                     endpoint=openai_endpoint.strip(),
                 )
                 if not ok:
-                    st.warning(f"ChatGPT API 呼叫失敗，改用 mock。原因: {err}")
+                    st.warning(f"ChatGPT API 呼叫失敗，改用 mock。原因: {err}。若是 429，請稍後重試或確認 billing/quota。")
                     result_5w = mock_mistral_5w(user_note, selected_name, selected_asset["subsystem"])
             else:
                 if use_openai_api:
