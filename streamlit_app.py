@@ -1188,12 +1188,47 @@ def main():
         if sim_ts_clean.empty:
             st.warning("No chart-ready data available for plotting.")
         else:
+            # Extend time horizon so threshold crossing year is visible at a glance.
+            sim_ts_clean = sim_ts_clean.copy()
+            sim_ts_clean["date"] = pd.to_datetime(sim_ts_clean["date"])
+            last_date = sim_ts_clean["date"].max()
+            start_date = sim_ts_clean["date"].min()
+
+            lookback = sim_ts_clean.tail(min(30, len(sim_ts_clean))).copy()
+            lookback["dnum"] = (lookback["date"] - lookback["date"].min()).dt.days
+            if len(lookback) >= 2:
+                slope_day = float(np.polyfit(lookback["dnum"], lookback["health_index"], 1)[0])
+            else:
+                slope_day = -0.05
+
+            if slope_day >= -0.001:
+                slope_day = -0.02
+
+            forecast_rows = []
+            base_health = float(sim_ts_clean["health_index"].iloc[-1])
+            crossing_date = None
+            for m in range(1, 121):  # up to ~10 years, monthly points
+                f_date = last_date + pd.DateOffset(months=m)
+                day_delta = (f_date - last_date).days
+                f_health = float(np.clip(base_health + slope_day * day_delta, 0, 100))
+                forecast_rows.append({"date": f_date, "health_forecast": f_health})
+                if crossing_date is None and f_health <= threshold:
+                    crossing_date = f_date
+
+            forecast_df = pd.DataFrame(forecast_rows)
+            if crossing_date is not None:
+                st.caption(f"Projected to cross Health Index 40 around year {crossing_date.year}.")
+            else:
+                st.caption("Projected threshold crossing is beyond current forecast horizon.")
+
+            max_date = forecast_df["date"].max() if crossing_date is None else (crossing_date + pd.DateOffset(months=12))
+
             health_line = (
                 alt.Chart(sim_ts_clean)
                 .mark_line(point=False, strokeWidth=2)
                 .encode(
-                    x=alt.X("date:T", title="Year", axis=alt.Axis(format="%Y")),
-                    y=alt.Y("health_index:Q", title="Health Index", scale=alt.Scale(domain=[0, 100])),
+                    x=alt.X("date:T", title="Year", axis=alt.Axis(format="%Y", tickCount="year"), scale=alt.Scale(domain=[start_date, max_date])),
+                    y=alt.Y("health_index:Q", title="Health Index", scale=alt.Scale(domain=[20, 100])),
                     color=alt.value("#1f77b4"),
                     tooltip=["date:T", "health_index:Q", "operating_mode:N"],
                 )
@@ -1207,12 +1242,21 @@ def main():
                     tooltip=["date:T", alt.Tooltip("health_quad_fit:Q", title="Quadratic Fit")],
                 )
             )
+            forecast_line = (
+                alt.Chart(forecast_df)
+                .mark_line(strokeDash=[5, 4], strokeWidth=2, color="#f59e0b")
+                .encode(
+                    x="date:T",
+                    y=alt.Y("health_forecast:Q", title="Health Index"),
+                    tooltip=["date:T", alt.Tooltip("health_forecast:Q", title="Forecast")],
+                )
+            )
             threshold_line = (
                 alt.Chart(sanitize_chart_df(pd.DataFrame({"y": [threshold]}), ["y"]))
                 .mark_rule(color="red", strokeDash=[6, 5])
                 .encode(y="y:Q")
             )
-            st.altair_chart((health_line + fit_line + threshold_line).properties(height=340).interactive(), use_container_width=True)
+            st.altair_chart((health_line + fit_line + forecast_line + threshold_line).properties(height=340).interactive(), use_container_width=True)
 
             anomaly = (
                 alt.Chart(sim_ts_clean)
