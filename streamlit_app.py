@@ -1368,7 +1368,7 @@ def main():
         tr_case = model_df.loc[model_df["asset_id"] == "TR1"].iloc[0]
         fixed_q = "What is the most likely current potential fault? (Please answer in English.)"
 
-        st.markdown("#### Fixed Transformer Fault Query")
+        
         st.text_input("Locked question", value=fixed_q, disabled=True, key="fixed_fault_question")
 
         default_story = (
