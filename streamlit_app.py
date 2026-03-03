@@ -1229,12 +1229,30 @@ def main():
 
             max_date = ext_fit_df["date"].max()
 
+<<<<<<< codex/build-streamlit-app-for-oracle-concept-ikz947
+            y_values = np.concatenate([
+                sim_ts_clean["health_index"].to_numpy(dtype=float),
+                ext_fit_df["health_reg_ext"].to_numpy(dtype=float),
+                np.array([float(threshold)]),
+            ])
+            y_low = float(np.nanmin(y_values))
+            y_high = float(np.nanmax(y_values))
+            y_span = max(y_high - y_low, 1.0)
+            y_pad = max(6.0, y_span * 0.35)
+            y_domain = [max(0.0, y_low - y_pad), min(100.0, y_high + y_pad)]
+
+=======
+>>>>>>> main
             health_line = (
                 alt.Chart(sim_ts_clean)
                 .mark_line(point=False, strokeWidth=2)
                 .encode(
                     x=alt.X("date:T", title="Year-Month", axis=alt.Axis(format="%Y-%m", labelAngle=-35, tickCount=12), scale=alt.Scale(domain=[start_date, max_date])),
+<<<<<<< codex/build-streamlit-app-for-oracle-concept-ikz947
+                    y=alt.Y("health_index:Q", title="Health Index", scale=alt.Scale(domain=y_domain)),
+=======
                     y=alt.Y("health_index:Q", title="Health Index", scale=alt.Scale(domain=[20, 100])),
+>>>>>>> main
                     color=alt.value("#1f77b4"),
                     tooltip=["date:T", "health_index:Q", "operating_mode:N"],
                 )
