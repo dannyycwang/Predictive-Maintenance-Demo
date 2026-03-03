@@ -1207,7 +1207,8 @@ def main():
 
             future_rows = []
             crossing_date = None
-            for d in range(1, 91):  # next 3 months, daily extension for smooth continuity
+            horizon_days = 540  # ~18 months to make year transitions visible
+            for d in range(1, horizon_days + 1):
                 f_date = last_date + pd.Timedelta(days=d)
                 f_idx = len(sim_ts_clean) + d
                 f_health = float(np.clip(np.polyval(reg_coef, f_idx), 0, 100))
@@ -1218,7 +1219,8 @@ def main():
             future_df = pd.DataFrame(future_rows)
             ext_fit_df = pd.concat([hist_fit_df, future_df], ignore_index=True)
 
-            health_90 = float(future_df["health_reg_ext"].iloc[-1]) if not future_df.empty else float(hist_fit_df["health_reg_ext"].iloc[-1])
+            health_90_row = future_df.loc[future_df.index == 89, "health_reg_ext"] if len(future_df) >= 90 else pd.Series(dtype=float)
+            health_90 = float(health_90_row.iloc[0]) if not health_90_row.empty else (float(future_df["health_reg_ext"].iloc[-1]) if not future_df.empty else float(hist_fit_df["health_reg_ext"].iloc[-1]))
             if crossing_date is not None:
                 st.caption(f"Projected to cross Health Index 40 around {crossing_date.strftime('%Y-%m')}.")
             else:
@@ -1231,7 +1233,7 @@ def main():
                 alt.Chart(sim_ts_clean)
                 .mark_line(point=False, strokeWidth=2)
                 .encode(
-                    x=alt.X("date:T", title="Year", axis=alt.Axis(format="%Y", tickCount="year"), scale=alt.Scale(domain=[start_date, max_date])),
+                    x=alt.X("date:T", title="Year-Month", axis=alt.Axis(format="%Y-%m", labelAngle=-35, tickCount=12), scale=alt.Scale(domain=[start_date, max_date])),
                     y=alt.Y("health_index:Q", title="Health Index", scale=alt.Scale(domain=[20, 100])),
                     color=alt.value("#1f77b4"),
                     tooltip=["date:T", "health_index:Q", "operating_mode:N"],
