@@ -1414,8 +1414,15 @@ def main():
 
             with c_rag_r:
                 st.markdown("#### Transformer Duval-style Triangle")
-                triangle_path = "assets/duval_triangle_reference.png"
-                st.image(triangle_path, caption="Duval Triangle reference (SVG in repository)", use_container_width=True)
+                triangle_candidates = [
+                    "assets/duval_triangle_reference.png",
+                    "assets/duval_triangle_reference.svg",
+                ]
+                triangle_path = next((p for p in triangle_candidates if os.path.exists(p)), "")
+                if triangle_path:
+                    st.image(triangle_path, caption=f"Duval Triangle reference ({os.path.basename(triangle_path)})", use_container_width=True)
+                else:
+                    st.warning("Duval triangle image file not found. Add `assets/duval_triangle_reference.png` or `.svg`.")
         else:
             st.info("Press **Submit Query** to generate the fault-analysis answer and display the triangle chart.")
 
