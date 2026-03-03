@@ -1,4 +1,5 @@
 import json
+import os
 from datetime import datetime, timedelta
 from urllib import request, error
 import time
@@ -9,7 +10,6 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import streamlit as st
-import matplotlib.pyplot as plt
 
 
 # ------------------------------
@@ -459,35 +459,6 @@ def call_openai_fault_analysis(question: str, model: str, api_key: str, endpoint
         return False, "", str(ex)
 
 
-def draw_transformer_triangle_case(ch4=35, c2h2=45, c2h4=20):
-    """Render a Duval-like triangle sketch for the transformer case."""
-    fig, ax = plt.subplots(figsize=(5.2, 4.2))
-    tri_x = [0, 1, 0.5, 0]
-    tri_y = [0, 0, 0.866, 0]
-    ax.plot(tri_x, tri_y, color="#2f2f2f", linewidth=1.5)
-
-    # simple region shading (stylized)
-    ax.fill([0.0, 0.35, 0.22], [0.0, 0.0, 0.45], color="#64b5f6", alpha=0.45)
-    ax.fill([0.22, 0.55, 0.35], [0.45, 0.45, 0.0], color="#7e57c2", alpha=0.45)
-    ax.fill([0.55, 1.0, 0.78], [0.45, 0.0, 0.45], color="#ef9a9a", alpha=0.45)
-
-    px = c2h4 / 100 + 0.5 * ch4 / 100
-    py = (ch4 / 100) * 0.866
-    ax.scatter([px], [py], s=70, color="white", edgecolor="#263238", zorder=5)
-    ax.text(px + 0.02, py + 0.02, "Case", fontsize=9)
-
-    ax.text(-0.05, -0.05, "% C2H2", fontsize=9)
-    ax.text(1.02, -0.05, "% C2H4", fontsize=9, ha="right")
-    ax.text(0.5, 0.91, "% CH4", fontsize=9, ha="center")
-    ax.text(0.58, 0.62, "T1/T2", fontsize=9, color="#4e342e")
-
-    ax.set_xlim(-0.08, 1.05)
-    ax.set_ylim(-0.08, 0.95)
-    ax.axis("off")
-    fig.tight_layout()
-    return fig
-
-
 def compute_risk_score(systemic_priority_norm: float, current_health: float, anomaly_score: float):
     """Risk formula required by the demo specification."""
     anomaly_n = float(np.clip(anomaly_score / 5.0, 0, 1))
@@ -723,9 +694,11 @@ def typewriter_render(text: str, speed_ms: int = 36):
 
 def get_secret_or_default(key: str, default: str = "") -> str:
     try:
-        return str(st.secrets[key])
+        if key in st.secrets:
+            return str(st.secrets[key])
     except Exception:
-        return default
+        pass
+    return str(os.getenv(key, default))
 
 
 
@@ -868,7 +841,7 @@ def main():
     openai_api_key = ""
 
     if use_openai_api:
-        st.sidebar.caption("OpenAI API is paid. Default model is lower-cost gpt-4o-mini.")
+        st.sidebar.caption("OpenAI API is paid. Configure key via Streamlit secrets or environment variables (do NOT commit keys).")
         openai_model = st.sidebar.text_input("OpenAI model", value=get_secret_or_default("OPENAI_MODEL", "gpt-4o-mini"), key="openai_model_input")
         openai_endpoint = st.sidebar.text_input(
             "OpenAI endpoint",
@@ -1024,13 +997,15 @@ def main():
                 _draft_set(mock_text)
                 st.success("Applied simulated voice content.")
 
-        head_l, head_r = st.columns([8.6, 1.4])
-        head_l.markdown("#### Draft · 5W Generator")
-        generate_clicked = head_r.button("➤", key="generate_5w_btn", use_container_width=True)
-
+        st.markdown("#### Draft · 5W Generator")
         st.markdown("<div class='gen-note'>Generate from the Draft text below, edit (human-in-the-loop), then submit to lock.</div>", unsafe_allow_html=True)
-        st.text_area("Draft text", height=200, key="notif_assist_editor", label_visibility="collapsed")
-        st.button("Clear Draft", key="clear_draft_btn", on_click=_draft_clear, use_container_width=True)
+        draft_col, arrow_col = st.columns([16, 2], vertical_alignment="top")
+        with draft_col:
+            st.text_area("Draft text", height=200, key="notif_assist_editor", label_visibility="collapsed")
+        with arrow_col:
+            st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
+            generate_clicked = st.button("➡", key="generate_5w_btn", use_container_width=True)
+            st.button("Clear", key="clear_draft_btn", on_click=_draft_clear, use_container_width=True)
 
         if generate_clicked:
             user_note = st.session_state.get("notif_assist_editor", "")
@@ -1424,9 +1399,8 @@ def main():
 
         with c_rag_r:
             st.markdown("#### Transformer Duval-style Triangle")
-            fig = draw_transformer_triangle_case(ch4=35, c2h2=45, c2h4=20)
-            st.pyplot(fig, use_container_width=True)
-            plt.close(fig)
+            triangle_path = "assets/duval_triangle_reference.svg"
+            st.image(triangle_path, caption="Duval Triangle reference (SVG in repository)", use_container_width=True)
 
         st.markdown("#### Explainability")
         explain = (
