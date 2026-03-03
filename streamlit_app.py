@@ -169,7 +169,7 @@ def generate_health_timeseries(assets_df: pd.DataFrame, seed: int = 42, days: in
         slope = float(np.polyfit(np.arange(len(recent14)), recent14["health_index"], 1)[0]) if len(recent14) > 1 else 0.0
         anomaly = float(asset_ts["anomaly_score"].iloc[-1])
 
-        threshold = 60
+        threshold = 40
         if slope < -0.05:
             ttf = float(np.clip(max(0.0, (threshold - current_health) / slope), 0, 365))
         elif current_health <= threshold:
@@ -458,7 +458,7 @@ def evaluate_options(asset: pd.Series, risk_score: float, predicted_ttf: float, 
     rows = []
     for opt in options:
         residual = np.clip(risk_score - opt["risk_reduction"] * 0.65, 0, 100)
-        urgency_bonus = 12 if predicted_ttf < 30 and opt["option"] == "Immediate Repair" else 0
+        urgency_bonus = 18 if predicted_ttf < 120 and opt["option"] == "Immediate Repair" else 0
         window_bonus = 6 if opt["option"] == "Merge with Planned Maintenance" else 0
         score = (
             0.55 * (100 - residual)
@@ -822,7 +822,7 @@ def main():
         openai_api_key = get_secret_or_default("OPENAI_API_KEY", "")
         st.sidebar.text_input(
             "OpenAI API key (managed)",
-            value=("Configured in secrets" if openai_api_key else "Not configured"),
+            value=("************" if openai_api_key else "Not configured"),
             disabled=True,
             key="openai_api_key_locked",
         )
@@ -1188,40 +1188,43 @@ def main():
         if sim_ts_clean.empty:
             st.warning("No chart-ready data available for plotting.")
         else:
-            # Extend time horizon so threshold crossing year is visible at a glance.
+            # Extend the existing regression line directly into the future.
             sim_ts_clean = sim_ts_clean.copy()
             sim_ts_clean["date"] = pd.to_datetime(sim_ts_clean["date"])
             last_date = sim_ts_clean["date"].max()
             start_date = sim_ts_clean["date"].min()
 
-            lookback = sim_ts_clean.tail(min(30, len(sim_ts_clean))).copy()
-            lookback["dnum"] = (lookback["date"] - lookback["date"].min()).dt.days
-            if len(lookback) >= 2:
-                slope_day = float(np.polyfit(lookback["dnum"], lookback["health_index"], 1)[0])
+            hist_idx = np.arange(len(sim_ts_clean))
+            if len(sim_ts_clean) >= 3:
+                reg_coef = np.polyfit(hist_idx, sim_ts_clean["health_index"], 2)
             else:
-                slope_day = -0.05
+                reg_coef = np.array([0.0, -0.08, float(sim_ts_clean["health_index"].iloc[-1])])
 
-            if slope_day >= -0.001:
-                slope_day = -0.02
-
-            forecast_rows = []
-            base_health = float(sim_ts_clean["health_index"].iloc[-1])
+            future_rows = []
             crossing_date = None
-            for m in range(1, 121):  # up to ~10 years, monthly points
-                f_date = last_date + pd.DateOffset(months=m)
-                day_delta = (f_date - last_date).days
-                f_health = float(np.clip(base_health + slope_day * day_delta, 0, 100))
-                forecast_rows.append({"date": f_date, "health_forecast": f_health})
-                if crossing_date is None and f_health <= threshold:
-                    crossing_date = f_date
+            for m in range(1, 13):  # next 3 months, weekly points
+                for w in range(4):
+                    f_date = last_date + pd.Timedelta(days=7 * (4 * (m - 1) + w + 1))
+                    f_idx = len(sim_ts_clean) + (4 * (m - 1) + w + 1)
+                    f_health = float(np.clip(np.polyval(reg_coef, f_idx), 0, 100))
+                    future_rows.append({"date": f_date, "health_reg_ext": f_health})
+                    if crossing_date is None and f_health <= threshold:
+                        crossing_date = f_date
 
-            forecast_df = pd.DataFrame(forecast_rows)
+            future_df = pd.DataFrame(future_rows)
+            ext_fit_df = pd.concat([
+                sim_ts_clean[["date", "health_quad_fit"]].rename(columns={"health_quad_fit": "health_reg_ext"}),
+                future_df,
+            ], ignore_index=True)
+
+            health_90 = float(future_df["health_reg_ext"].iloc[-1]) if not future_df.empty else float(sim_ts_clean["health_index"].iloc[-1])
             if crossing_date is not None:
-                st.caption(f"Projected to cross Health Index 40 around year {crossing_date.year}.")
+                st.caption(f"Projected to cross Health Index 40 around {crossing_date.strftime('%Y-%m')}.")
             else:
-                st.caption("Projected threshold crossing is beyond current forecast horizon.")
+                st.caption("Projected threshold crossing is beyond current 3-month horizon.")
+            st.markdown(f"**3-month projection:** Health Index ≈ **{health_90:.1f}**. {'Immediate repair is recommended.' if health_90 <= 40 else 'Prepare and schedule maintenance soon.'}")
 
-            max_date = forecast_df["date"].max() if crossing_date is None else (crossing_date + pd.DateOffset(months=12))
+            max_date = ext_fit_df["date"].max()
 
             health_line = (
                 alt.Chart(sim_ts_clean)
@@ -1234,21 +1237,12 @@ def main():
                 )
             )
             fit_line = (
-                alt.Chart(sim_ts_clean)
+                alt.Chart(ext_fit_df)
                 .mark_line(strokeDash=[8, 5], strokeWidth=2, color="#2ca02c")
                 .encode(
                     x="date:T",
-                    y=alt.Y("health_quad_fit:Q", title="Health Index"),
-                    tooltip=["date:T", alt.Tooltip("health_quad_fit:Q", title="Quadratic Fit")],
-                )
-            )
-            forecast_line = (
-                alt.Chart(forecast_df)
-                .mark_line(strokeDash=[5, 4], strokeWidth=2, color="#f59e0b")
-                .encode(
-                    x="date:T",
-                    y=alt.Y("health_forecast:Q", title="Health Index"),
-                    tooltip=["date:T", alt.Tooltip("health_forecast:Q", title="Forecast")],
+                    y=alt.Y("health_reg_ext:Q", title="Health Index"),
+                    tooltip=["date:T", alt.Tooltip("health_reg_ext:Q", title="Extended Regression")],
                 )
             )
             threshold_line = (
@@ -1256,7 +1250,7 @@ def main():
                 .mark_rule(color="red", strokeDash=[6, 5])
                 .encode(y="y:Q")
             )
-            st.altair_chart((health_line + fit_line + forecast_line + threshold_line).properties(height=340).interactive(), use_container_width=True)
+            st.altair_chart((health_line + fit_line + threshold_line).properties(height=340).interactive(), use_container_width=True)
 
             anomaly = (
                 alt.Chart(sim_ts_clean)
@@ -1276,7 +1270,7 @@ def main():
     with tabs[4]:
         st.subheader("Decision Orchestration")
         
-        st.markdown(f"Based on current conditions, the recommended strategy is **{options_df.iloc[0]['option']}** for a balanced trade-off between cost and residual risk.")
+        st.markdown(f"Based on current conditions and the 3-month health projection toward the 40 threshold, the recommended strategy is **{options_df.iloc[0]['option']}**.")
 
         with st.expander("View strategy scoring details", expanded=False):
             st.dataframe(options_df, use_container_width=True, hide_index=True)
