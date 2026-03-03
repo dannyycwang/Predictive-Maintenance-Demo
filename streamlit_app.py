@@ -819,7 +819,7 @@ def main():
             value=get_secret_or_default("OPENAI_API_ENDPOINT", "https://api.openai.com/v1/chat/completions"),
             key="openai_endpoint_input",
         )
-        openai_api_key = get_secret_or_default("OPENAI_API_KEY", "")
+        openai_api_key = get_secret_or_default("OPENAI_API_KEY", "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")
         st.sidebar.text_input(
             "OpenAI API key (managed)",
             value=("************" if openai_api_key else "Not configured"),
