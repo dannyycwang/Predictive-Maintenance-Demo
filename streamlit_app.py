@@ -1368,7 +1368,7 @@ def main():
         tr_case = model_df.loc[model_df["asset_id"] == "TR1"].iloc[0]
         fixed_q = "What is the most likely current potential fault? (Please answer in English.)"
 
-        
+        st.markdown("#### Fixed Transformer Fault Query")
         st.text_input("Locked question", value=fixed_q, disabled=True, key="fixed_fault_question")
 
         default_story = (
@@ -1378,29 +1378,46 @@ def main():
             "Recommended action: schedule inspection and maintenance immediately."
         )
 
-        rag_answer = default_story
-        if use_openai_api and openai_api_key.strip() and openai_endpoint.strip():
-            llm_q = (
-                f"{fixed_q} Use transformer TR1 with health index {float(tr_case['current_health']):.1f}. "
-                "Assume IEEE C57.104:2019 evidence indicates elevated CO2 and infer fault T1 thermal fault (T>300°C). "
-                "Provide a concise executive answer with recommended action."
-            )
-            ok_rag, rag_text, rag_err = call_openai_fault_analysis(llm_q, openai_model, openai_api_key.strip(), openai_endpoint.strip())
-            if ok_rag:
-                rag_answer = rag_text
-            else:
-                st.warning(f"RAG LLM generation failed; using scenario baseline. Reason: {rag_err}")
+        if "rag_generated" not in st.session_state:
+            st.session_state["rag_generated"] = False
+        if "rag_answer_cached" not in st.session_state:
+            st.session_state["rag_answer_cached"] = ""
 
-        c_rag_l, c_rag_r = st.columns([1.3, 1])
-        with c_rag_l:
-            st.markdown("#### LLM-Generated RAG Answer")
-            st.info(rag_answer)
-            st.markdown("**Reference (scenario assumption):** IEEE C57.104:2019, elevated CO2 trend")
+        c_submit_l, c_submit_r = st.columns([2, 7])
+        with c_submit_l:
+            submit_rag = st.button("Submit Query", key="submit_fixed_rag", use_container_width=True)
+        with c_submit_r:
+            st.caption("Click submit to generate the answer and reveal the Duval triangle panel.")
 
-        with c_rag_r:
-            st.markdown("#### Transformer Duval-style Triangle")
-            triangle_path = "assets/duval_triangle_reference.svg"
-            st.image(triangle_path, caption="Duval Triangle reference (SVG in repository)", use_container_width=True)
+        if submit_rag:
+            rag_answer = default_story
+            if use_openai_api and openai_api_key.strip() and openai_endpoint.strip():
+                llm_q = (
+                    f"{fixed_q} Use transformer TR1 with health index {float(tr_case['current_health']):.1f}. "
+                    "Assume IEEE C57.104:2019 evidence indicates elevated CO2 and infer fault T1 thermal fault (T>300°C). "
+                    "Provide a concise executive answer with recommended action."
+                )
+                ok_rag, rag_text, rag_err = call_openai_fault_analysis(llm_q, openai_model, openai_api_key.strip(), openai_endpoint.strip())
+                if ok_rag:
+                    rag_answer = rag_text
+                else:
+                    st.warning(f"RAG LLM generation failed; using scenario baseline. Reason: {rag_err}")
+            st.session_state["rag_answer_cached"] = rag_answer
+            st.session_state["rag_generated"] = True
+
+        if st.session_state.get("rag_generated", False):
+            c_rag_l, c_rag_r = st.columns([1.3, 1])
+            with c_rag_l:
+                st.markdown("#### LLM-Generated RAG Answer")
+                st.info(st.session_state.get("rag_answer_cached", default_story))
+                st.markdown("**Reference (scenario assumption):** IEEE C57.104:2019, elevated CO2 trend")
+
+            with c_rag_r:
+                st.markdown("#### Transformer Duval-style Triangle")
+                triangle_path = "assets/duval_triangle_reference.png"
+                st.image(triangle_path, caption="Duval Triangle reference (SVG in repository)", use_container_width=True)
+        else:
+            st.info("Press **Submit Query** to generate the fault-analysis answer and display the triangle chart.")
 
         st.markdown("#### Explainability")
         explain = (
