@@ -1194,30 +1194,31 @@ def main():
             last_date = sim_ts_clean["date"].max()
             start_date = sim_ts_clean["date"].min()
 
-            hist_idx = np.arange(len(sim_ts_clean))
+            # Use one single polynomial model for both historical fit and future extension.
+            hist_idx = np.arange(len(sim_ts_clean), dtype=float)
             if len(sim_ts_clean) >= 3:
                 reg_coef = np.polyfit(hist_idx, sim_ts_clean["health_index"], 2)
             else:
                 reg_coef = np.array([0.0, -0.08, float(sim_ts_clean["health_index"].iloc[-1])])
 
+            hist_fit = np.clip(np.polyval(reg_coef, hist_idx), 0, 100)
+            hist_fit_df = sim_ts_clean[["date"]].copy()
+            hist_fit_df["health_reg_ext"] = hist_fit
+
             future_rows = []
             crossing_date = None
-            for m in range(1, 13):  # next 3 months, weekly points
-                for w in range(4):
-                    f_date = last_date + pd.Timedelta(days=7 * (4 * (m - 1) + w + 1))
-                    f_idx = len(sim_ts_clean) + (4 * (m - 1) + w + 1)
-                    f_health = float(np.clip(np.polyval(reg_coef, f_idx), 0, 100))
-                    future_rows.append({"date": f_date, "health_reg_ext": f_health})
-                    if crossing_date is None and f_health <= threshold:
-                        crossing_date = f_date
+            for d in range(1, 91):  # next 3 months, daily extension for smooth continuity
+                f_date = last_date + pd.Timedelta(days=d)
+                f_idx = len(sim_ts_clean) + d
+                f_health = float(np.clip(np.polyval(reg_coef, f_idx), 0, 100))
+                future_rows.append({"date": f_date, "health_reg_ext": f_health})
+                if crossing_date is None and f_health <= threshold:
+                    crossing_date = f_date
 
             future_df = pd.DataFrame(future_rows)
-            ext_fit_df = pd.concat([
-                sim_ts_clean[["date", "health_quad_fit"]].rename(columns={"health_quad_fit": "health_reg_ext"}),
-                future_df,
-            ], ignore_index=True)
+            ext_fit_df = pd.concat([hist_fit_df, future_df], ignore_index=True)
 
-            health_90 = float(future_df["health_reg_ext"].iloc[-1]) if not future_df.empty else float(sim_ts_clean["health_index"].iloc[-1])
+            health_90 = float(future_df["health_reg_ext"].iloc[-1]) if not future_df.empty else float(hist_fit_df["health_reg_ext"].iloc[-1])
             if crossing_date is not None:
                 st.caption(f"Projected to cross Health Index 40 around {crossing_date.strftime('%Y-%m')}.")
             else:
