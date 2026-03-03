@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-label="Duval Triangle reference">
+  <rect width="1200" height="700" fill="#f6f6f6"/>
+  <g transform="translate(70,40)">
+    <polygon points="40,560 640,560 340,40" fill="#6dc5d4"/>
+
+    <polygon points="170,560 490,560 330,290" fill="#3f5aa9"/>
+    <polygon points="350,40 470,250 350,390 470,560 530,560 410,390 530,250 410,40" fill="#b04fa3"/>
+    <polygon points="410,40 470,145 430,210 370,110" fill="#efb0b0"/>
+    <polygon points="430,40 480,40 540,145 490,145" fill="#f4cc00"/>
+    <polygon points="530,560 640,560 540,145 490,145" fill="#3b3b3b"/>
+    <polygon points="334,22 346,22 340,10" fill="#e31c23"/>
+
+    <line x1="120" y1="560" x2="410" y2="40" stroke="#ffffff" stroke-width="4"/>
+    <line x1="230" y1="560" x2="60" y2="270" stroke="#ffffff" stroke-width="4"/>
+    <circle cx="88" cy="307" r="8" fill="#fff"/>
+
+    <text x="0" y="320" font-size="38" font-family="Arial" fill="#111">% CH4</text>
+    <text x="500" y="320" font-size="38" font-family="Arial" fill="#111">% C2H4</text>
+    <text x="250" y="620" font-size="38" font-family="Arial" fill="#111">% C2H2</text>
+
+    <text x="135" y="593" font-size="36" font-family="Arial" fill="#111">80</text>
+    <text x="260" y="593" font-size="36" font-family="Arial" fill="#111">60</text>
+    <text x="390" y="593" font-size="36" font-family="Arial" fill="#111">40</text>
+    <text x="520" y="593" font-size="36" font-family="Arial" fill="#111">20</text>
+  </g>
+
+  <g transform="translate(700,190)">
+    <rect x="0" y="0" width="470" height="390" fill="#e8e8e8"/>
+
+    <rect x="18" y="22" width="72" height="32" fill="#6dc5d4"/><text x="110" y="46" font-family="Arial" font-size="36" font-weight="700" fill="#222">D1  Discharges of low energy</text>
+    <rect x="18" y="74" width="72" height="32" fill="#3f5aa9"/><text x="110" y="98" font-family="Arial" font-size="36" font-weight="700" fill="#222">D2  Discharges of high energy</text>
+    <rect x="18" y="126" width="72" height="32" fill="#b04fa3"/><text x="110" y="150" font-family="Arial" font-size="36" font-weight="700" fill="#222">DT  Electrical and thermal</text>
+    <rect x="18" y="178" width="72" height="32" fill="#efb0b0"/><text x="110" y="202" font-family="Arial" font-size="36" font-weight="700" fill="#222">T1  Thermal fault, T &lt;300 ℃</text>
+    <rect x="18" y="230" width="72" height="32" fill="#f4cc00"/><text x="110" y="254" font-family="Arial" font-size="36" font-weight="700" fill="#222">T2  Thermal fault, 300 &lt;T&lt;700 ℃</text>
+    <rect x="18" y="282" width="72" height="32" fill="#3b3b3b"/><text x="110" y="306" font-family="Arial" font-size="36" font-weight="700" fill="#222">T3  Thermal fault, T &gt;700 ℃</text>
+    <rect x="18" y="334" width="72" height="32" fill="#e31c23"/><text x="110" y="358" font-family="Arial" font-size="36" font-weight="700" fill="#222">PD  Partial discharges</text>
+  </g>
+</svg>
