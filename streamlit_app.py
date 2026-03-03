@@ -9,6 +9,7 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import streamlit as st
+import matplotlib.pyplot as plt
 
 
 # ------------------------------
@@ -123,13 +124,13 @@ def generate_health_timeseries(assets_df: pd.DataFrame, seed: int = 42, days: in
     dates = pd.date_range(datetime.now().date() - timedelta(days=days - 1), periods=days, freq="D")
 
     modes = np.array(["Normal", "High Load", "Start-Stop"])
-    mode_shift = {"Normal": 0.0, "High Load": -3.2, "Start-Stop": -1.7}
+    mode_shift = {"Normal": 0.0, "High Load": -2.2, "Start-Stop": -1.2}
 
     all_data, summary = [], []
 
     for _, asset in assets_df.iterrows():
         subsystem = asset["subsystem"]
-        base = rng.uniform(73, 96)
+        base = rng.uniform(80, 98)
         noise = rng.normal(0, 1.8, days)
         mode_series = rng.choice(modes, size=days, p=[0.62, 0.23, 0.15])
 
@@ -430,6 +431,61 @@ def call_openai_chatgpt_5w(user_text: str, asset_name: str, subsystem: str, mode
             return False, {}, str(ex)
 
     return False, {}, "Unknown OpenAI API error"
+
+
+def call_openai_fault_analysis(question: str, model: str, api_key: str, endpoint: str = "https://api.openai.com/v1/chat/completions"):
+    """Generate fixed transformer fault-analysis response via LLM."""
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": "You are a transformer diagnostics assistant. Answer in concise professional English."},
+            {"role": "user", "content": question},
+        ],
+        "temperature": 0.2,
+    }
+    req = request.Request(
+        endpoint,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+        method="POST",
+    )
+    try:
+        with request.urlopen(req, timeout=22) as resp:
+            raw = resp.read().decode("utf-8")
+        outer = json.loads(raw)
+        content = str(outer.get("choices", [{}])[0].get("message", {}).get("content", "")).strip()
+        return (True, content, "") if content else (False, "", "Empty response")
+    except Exception as ex:
+        return False, "", str(ex)
+
+
+def draw_transformer_triangle_case(ch4=35, c2h2=45, c2h4=20):
+    """Render a Duval-like triangle sketch for the transformer case."""
+    fig, ax = plt.subplots(figsize=(5.2, 4.2))
+    tri_x = [0, 1, 0.5, 0]
+    tri_y = [0, 0, 0.866, 0]
+    ax.plot(tri_x, tri_y, color="#2f2f2f", linewidth=1.5)
+
+    # simple region shading (stylized)
+    ax.fill([0.0, 0.35, 0.22], [0.0, 0.0, 0.45], color="#64b5f6", alpha=0.45)
+    ax.fill([0.22, 0.55, 0.35], [0.45, 0.45, 0.0], color="#7e57c2", alpha=0.45)
+    ax.fill([0.55, 1.0, 0.78], [0.45, 0.0, 0.45], color="#ef9a9a", alpha=0.45)
+
+    px = c2h4 / 100 + 0.5 * ch4 / 100
+    py = (ch4 / 100) * 0.866
+    ax.scatter([px], [py], s=70, color="white", edgecolor="#263238", zorder=5)
+    ax.text(px + 0.02, py + 0.02, "Case", fontsize=9)
+
+    ax.text(-0.05, -0.05, "% C2H2", fontsize=9)
+    ax.text(1.02, -0.05, "% C2H4", fontsize=9, ha="right")
+    ax.text(0.5, 0.91, "% CH4", fontsize=9, ha="center")
+    ax.text(0.58, 0.62, "T1/T2", fontsize=9, color="#4e342e")
+
+    ax.set_xlim(-0.08, 1.05)
+    ax.set_ylim(-0.08, 0.95)
+    ax.axis("off")
+    fig.tight_layout()
+    return fig
 
 
 def compute_risk_score(systemic_priority_norm: float, current_health: float, anomaly_score: float):
@@ -819,7 +875,7 @@ def main():
             value=get_secret_or_default("OPENAI_API_ENDPOINT", "https://api.openai.com/v1/chat/completions"),
             key="openai_endpoint_input",
         )
-        openai_api_key = get_secret_or_default("OPENAI_API_KEY", "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")
+        openai_api_key = get_secret_or_default("OPENAI_API_KEY", "")
         st.sidebar.text_input(
             "OpenAI API key (managed)",
             value=("************" if openai_api_key else "Not configured"),
@@ -968,12 +1024,11 @@ def main():
                 _draft_set(mock_text)
                 st.success("Applied simulated voice content.")
 
-        head_l, head_m, head_r = st.columns([2.2, 8, 1.4])
+        head_l, head_r = st.columns([8.6, 1.4])
         head_l.markdown("#### Draft · 5W Generator")
-        head_m.text_input("5W prompt", value="", placeholder="Ask a question...", key="fivew_trigger_input", label_visibility="collapsed")
         generate_clicked = head_r.button("➤", key="generate_5w_btn", use_container_width=True)
 
-        st.markdown("<div class='gen-note'>Generate a draft, edit it (human-in-the-loop), then submit to lock.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='gen-note'>Generate from the Draft text below, edit (human-in-the-loop), then submit to lock.</div>", unsafe_allow_html=True)
         st.text_area("Draft text", height=200, key="notif_assist_editor", label_visibility="collapsed")
         st.button("Clear Draft", key="clear_draft_btn", on_click=_draft_clear, use_container_width=True)
 
@@ -1168,9 +1223,9 @@ def main():
         asset_ts = sanitize_chart_df(asset_ts, ["date", "health_index", "anomaly_score"])
         threshold = 40
 
-        st.caption("Use the slider to simulate timeline progression and observe health decline; dashed line shows quadratic trend.")
+        st.caption("Use the slider to simulate timeline progression and observe health decline; dashed line shows linear trend.")
         st.caption("Threshold line uses Health Index = 40.")
-        min_sim = 3 if len(asset_ts) >= 3 else 1
+        min_sim = 2 if len(asset_ts) >= 2 else 1
         default_sim = len(asset_ts) if len(asset_ts) > 0 else 1
         sim_day = st.slider("Simulation Day (time progression)", min_value=min_sim, max_value=default_sim, value=default_sim, step=1)
         sim_ts = asset_ts.iloc[:sim_day].copy()
@@ -1179,12 +1234,12 @@ def main():
             st.warning("No data available for the selected range.")
             sim_ts = asset_ts.copy()
         sim_ts["t_idx"] = np.arange(len(sim_ts))
-        if len(sim_ts) >= 3:
-            coef = np.polyfit(sim_ts["t_idx"], sim_ts["health_index"], 2)
-            sim_ts["health_quad_fit"] = np.polyval(coef, sim_ts["t_idx"])
+        if len(sim_ts) >= 2:
+            coef = np.polyfit(sim_ts["t_idx"], sim_ts["health_index"], 1)
+            sim_ts["health_fit"] = np.polyval(coef, sim_ts["t_idx"])
         else:
-            sim_ts["health_quad_fit"] = sim_ts["health_index"]
-        sim_ts_clean = sanitize_chart_df(sim_ts, ["date", "health_index", "health_quad_fit", "anomaly_score"])
+            sim_ts["health_fit"] = sim_ts["health_index"]
+        sim_ts_clean = sanitize_chart_df(sim_ts, ["date", "health_index", "health_fit", "anomaly_score"])
         if sim_ts_clean.empty:
             st.warning("No chart-ready data available for plotting.")
         else:
@@ -1196,10 +1251,10 @@ def main():
 
             # Use one single polynomial model for both historical fit and future extension.
             hist_idx = np.arange(len(sim_ts_clean), dtype=float)
-            if len(sim_ts_clean) >= 3:
-                reg_coef = np.polyfit(hist_idx, sim_ts_clean["health_index"], 2)
+            if len(sim_ts_clean) >= 2:
+                reg_coef = np.polyfit(hist_idx, sim_ts_clean["health_index"], 1)
             else:
-                reg_coef = np.array([0.0, -0.08, float(sim_ts_clean["health_index"].iloc[-1])])
+                reg_coef = np.array([-0.08, float(sim_ts_clean["health_index"].iloc[-1])])
 
             hist_fit = np.clip(np.polyval(reg_coef, hist_idx), 0, 100)
             hist_fit_df = sim_ts_clean[["date"]].copy()
@@ -1266,7 +1321,7 @@ def main():
                 .encode(
                     x="date:T",
                     y=alt.Y("health_reg_ext:Q", title="Health Index"),
-                    tooltip=["date:T", alt.Tooltip("health_reg_ext:Q", title="Extended Regression")],
+                    tooltip=["date:T", alt.Tooltip("health_reg_ext:Q", title="Linear Fit Extension")],
                 )
             )
             threshold_line = (
@@ -1286,7 +1341,7 @@ def main():
 
         with st.expander("View latest 10 health records", expanded=False):
             st.dataframe(
-                sim_ts[["date", "operating_mode", "health_index", "health_quad_fit", "anomaly_score"]].tail(10).sort_values("date", ascending=False),
+                sim_ts[["date", "operating_mode", "health_index", "health_fit", "anomaly_score"]].tail(10).sort_values("date", ascending=False),
                 use_container_width=True,
                 hide_index=True,
             )
@@ -1334,45 +1389,51 @@ def main():
 
     with tabs[5]:
         st.subheader("Standards (RAG) & Explainability")
-        
 
-        st.markdown("#### Cited Guidance")
-        st.markdown("The system selected the most relevant 1–2 standards snippets based on subsystem and failure hypothesis.")
-        with st.expander("View cited standards", expanded=False):
-            for snip in standards:
-                st.markdown(f"**{snip['title']}**")
-                st.write(snip["excerpt"])
+        tr_case = model_df.loc[model_df["asset_id"] == "TR1"].iloc[0]
+        fixed_q = "What is the most likely current potential fault? (Please answer in English.)"
+
+        st.markdown("#### Fixed Transformer Fault Query")
+        st.text_input("Locked question", value=fixed_q, disabled=True, key="fixed_fault_question")
+
+        default_story = (
+            f"Transformer case (TR1): current health index is {float(tr_case['current_health']):.1f}. "
+            "Based on IEEE C57.104 (2019) style interpretation, CO2 concentration is elevated. "
+            "Estimated fault type: T1 thermal fault (T>300°C). "
+            "Recommended action: schedule inspection and maintenance immediately."
+        )
+
+        rag_answer = default_story
+        if use_openai_api and openai_api_key.strip() and openai_endpoint.strip():
+            llm_q = (
+                f"{fixed_q} Use transformer TR1 with health index {float(tr_case['current_health']):.1f}. "
+                "Assume IEEE C57.104:2019 evidence indicates elevated CO2 and infer fault T1 thermal fault (T>300°C). "
+                "Provide a concise executive answer with recommended action."
+            )
+            ok_rag, rag_text, rag_err = call_openai_fault_analysis(llm_q, openai_model, openai_api_key.strip(), openai_endpoint.strip())
+            if ok_rag:
+                rag_answer = rag_text
+            else:
+                st.warning(f"RAG LLM generation failed; using scenario baseline. Reason: {rag_err}")
+
+        c_rag_l, c_rag_r = st.columns([1.3, 1])
+        with c_rag_l:
+            st.markdown("#### LLM-Generated RAG Answer")
+            st.info(rag_answer)
+            st.markdown("**Reference (scenario assumption):** IEEE C57.104:2019, elevated CO2 trend")
+
+        with c_rag_r:
+            st.markdown("#### Transformer Duval-style Triangle")
+            fig = draw_transformer_triangle_case(ch4=35, c2h2=45, c2h4=20)
+            st.pyplot(fig, use_container_width=True)
+            plt.close(fig)
 
         st.markdown("#### Explainability")
         explain = (
-            f"Recommended strategy **{options_df.iloc[0]['option']}** is selected because {selected_name} has "
-            f"systemic priority **{selected_asset['systemic_priority']:.1f}**, current health **{selected_asset['current_health']:.1f}**, "
-            f"and anomaly score **{selected_asset['anomaly_score']:.2f}** resulting in risk score **{risk_score:.1f}**. "
-            f"Notification parser indicates **{parsed_notification['suspected_failure_type']}** on "
-            f"**{parsed_notification['suspected_component']}** (confidence {parsed_notification['confidence']:.2f}). "
-            f"Retrieved standards constrain excessive deferral and support options with lower residual risk."
+            f"Decision context: TR1 current health **{float(tr_case['current_health']):.1f}**, risk score **{float(tr_case['risk_score']):.1f}**. "
+            f"System recommendation from options remains **{options_df.iloc[0]['option']}** with focus on preventing thermal escalation."
         )
         st.info(explain)
-
-        factors_df = pd.DataFrame(
-            {
-                "factor": ["Systemic Priority", "Health Degradation", "Anomaly", "Notification Confidence"],
-                "value": [
-                    round(float(selected_asset["systemic_priority"]), 1),
-                    round(float(100 - selected_asset["current_health"]), 1),
-                    round(float(selected_asset["anomaly_score"] * 20), 1),
-                    round(float(parsed_notification["confidence"] * 100), 1),
-                ],
-            }
-        )
-        factors_df_chart = sanitize_chart_df(factors_df, ["factor", "value"])
-        factor_chart = (
-            alt.Chart(factors_df_chart)
-            .mark_bar(cornerRadiusTopLeft=5, cornerRadiusTopRight=5)
-            .encode(x="factor:N", y="value:Q", color="factor:N", tooltip=["factor", "value"])
-            .properties(height=260)
-        )
-        st.altair_chart(factor_chart, use_container_width=True)
 
     with tabs[6]:
         st.subheader("SAP Proposal Export")
