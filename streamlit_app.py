@@ -287,20 +287,18 @@ def notification_templates(subsystem: str):
 
 
 def notification_keywords(subsystem: str):
-    """Short keyword recommendations for operators (including practical units)."""
+    """Short keyword recommendations for operators (compact and unit-friendly)."""
     common = [
-        "vibration", "noise", "bearing", "alignment", "temperature", "pressure",
-        "leak", "lubrication", "85°C", "2.5 mm/s", "6 bar", "delta +12°C"
+        "vib", "noise", "bear", "align", "temp", "press",
+        "leak", "oil", "85°C", "3 mm/s"
     ]
     if subsystem == "Electrical":
         return [
-            "hotspot", "insulation", "switchgear", "trip", "overload", "partial discharge",
-            "95°C", "450V", "120A", "THD 8%"
+            "hot", "insul", "trip", "load", "95°C", "450V", "120A", "THD 8%"
         ]
     if subsystem == "Process":
         return [
-            "pressure", "flow", "separator", "valve", "leak", "corrosion",
-            "8 bar", "120 m3/h", "45°C", "DP +0.8 bar"
+            "press", "flow", "valve", "leak", "8 bar", "120 m3/h", "45°C", "DP +0.8"
         ]
     return common
 
@@ -1168,9 +1166,10 @@ def main():
 
         asset_ts = ts_df[ts_df["asset_id"] == selected_asset["asset_id"]].sort_values("date").reset_index(drop=True).copy()
         asset_ts = sanitize_chart_df(asset_ts, ["date", "health_index", "anomaly_score"])
-        threshold = 60
+        threshold = 40
 
         st.caption("Use the slider to simulate timeline progression and observe health decline; dashed line shows quadratic trend.")
+        st.caption("Threshold line uses Health Index = 40.")
         min_sim = 3 if len(asset_ts) >= 3 else 1
         default_sim = len(asset_ts) if len(asset_ts) > 0 else 1
         sim_day = st.slider("Simulation Day (time progression)", min_value=min_sim, max_value=default_sim, value=default_sim, step=1)
@@ -1193,7 +1192,7 @@ def main():
                 alt.Chart(sim_ts_clean)
                 .mark_line(point=False, strokeWidth=2)
                 .encode(
-                    x=alt.X("date:T", title="Date"),
+                    x=alt.X("date:T", title="Year", axis=alt.Axis(format="%Y")),
                     y=alt.Y("health_index:Q", title="Health Index", scale=alt.Scale(domain=[0, 100])),
                     color=alt.value("#1f77b4"),
                     tooltip=["date:T", "health_index:Q", "operating_mode:N"],
