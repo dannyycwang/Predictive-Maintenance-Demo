@@ -471,9 +471,9 @@ def compute_risk_score(systemic_priority_norm: float, current_health: float, ano
 
 
 def evaluate_options(asset: pd.Series, risk_score: float, predicted_ttf: float, defer_weeks: int, planned_window: str):
-    """Evaluate four intervention strategies with synthetic economics and risk impacts."""
+    """Evaluate intervention strategies with a 3C score: DecisionScore = 100 / (C_maintenance + C_production + C_risk)."""
     base_cost = float(asset["mobilization_cost"])
-    crit = asset["criticality"] / 10
+    crit = float(asset["criticality"]) / 10.0
 
     options = [
         {"option": "Immediate Repair", "risk_reduction": np.clip(70 + 20 * crit, 0, 100), "expected_downtime_hours": 16 + 8 * crit, "mobilization_cost": base_cost * 1.15},
@@ -485,16 +485,15 @@ def evaluate_options(asset: pd.Series, risk_score: float, predicted_ttf: float, 
     rows = []
     for opt in options:
         residual = np.clip(risk_score - opt["risk_reduction"] * 0.65, 0, 100)
-        urgency_bonus = 18 if predicted_ttf < 120 and opt["option"] == "Immediate Repair" else 0
-        window_bonus = 6 if opt["option"] == "Merge with Planned Maintenance" else 0
-        score = (
-            0.55 * (100 - residual)
-            + 0.25 * opt["risk_reduction"]
-            + 0.10 * (100 - min(opt["expected_downtime_hours"], 100))
-            + 0.10 * (100 - min(opt["mobilization_cost"] / 4000, 100))
-            + urgency_bonus
-            + window_bonus
-        )
+
+        # 3C components (normalized to keep Decision Score in an interpretable 0-100-ish range)
+        c_maintenance = max(opt["mobilization_cost"] / 300000.0, 0.05)
+        c_production = max(opt["expected_downtime_hours"] / 120.0, 0.05)
+        c_risk = max((residual / 100.0) * (0.6 + 0.4 * crit), 0.05)
+
+        c_total = c_maintenance + c_production + c_risk
+        decision_score = float(np.clip(100.0 / c_total, 0, 100))
+
         rows.append(
             {
                 "option": opt["option"],
@@ -502,7 +501,11 @@ def evaluate_options(asset: pd.Series, risk_score: float, predicted_ttf: float, 
                 "expected_downtime_hours": round(float(opt["expected_downtime_hours"]), 1),
                 "mobilization_cost": round(float(opt["mobilization_cost"]), 0),
                 "residual_risk": round(float(residual), 1),
-                "decision_score": round(float(np.clip(score, 0, 100)), 1),
+                "C_maintenance": round(float(c_maintenance), 3),
+                "C_production": round(float(c_production), 3),
+                "C_risk": round(float(c_risk), 3),
+                "C_total": round(float(c_total), 3),
+                "decision_score": round(decision_score, 1),
                 "planned_window": planned_window if opt["option"] == "Merge with Planned Maintenance" else "-",
                 "defer_weeks": defer_weeks if opt["option"] == "Defer to Next Window" else 0,
             }
@@ -1377,12 +1380,8 @@ def main():
         """)
         st.markdown(f"Based on current conditions and the 3-month health projection toward the 40 threshold, the recommended strategy is **{options_df.iloc[0]['option']}**.")
 
-        # Keep existing scoring table, then add an explicit 3C simulation view for planner storytelling.
+        # Reuse 3C components already computed by the scoring layer.
         options_3c = options_df.copy()
-        options_3c["C_maintenance"] = (options_3c["mobilization_cost"] / 1000.0).round(1)
-        options_3c["C_production"] = (options_3c["expected_downtime_hours"] * 2.4).round(1)
-        options_3c["C_risk"] = ((options_3c["residual_risk"] / 100.0) * float(selected_asset["criticality"]) * 18.0).round(1)
-        options_3c["decision_score_3c"] = (options_3c["C_maintenance"] + options_3c["C_production"] + options_3c["C_risk"]).round(1)
 
         with st.expander("View strategy scoring details", expanded=False):
             st.dataframe(options_3c, use_container_width=True, hide_index=True)
@@ -1429,20 +1428,21 @@ def main():
         )
         chosen = options_3c.loc[options_3c["option"] == selected_option_name].iloc[0]
 
-        st.latex(r"Decision\ Score(P_j) = C_{maintenance}(P_j) + C_{production}(P_j) + C_{risk}(P_j)")
+        st.latex(r"DecisionScore(P_j)=\frac{100}{C_{maintenance}(P_j)+C_{production}(P_j)+C_{risk}(P_j)}")
         st.markdown(
             f"""
             <div style="font-size:1.75rem; font-weight:700; line-height:1.6;">
-            Decision Score({selected_option_name}) =
-            <span style="color:#2563eb;">{chosen['C_maintenance']:.1f}</span>
-            + <span style="color:#ea580c;">{chosen['C_production']:.1f}</span>
-            + <span style="color:#9333ea;">{chosen['C_risk']:.1f}</span>
-            = <span style="color:#111827;">{chosen['decision_score_3c']:.1f}</span>
+            DecisionScore({selected_option_name}) =
+            100 / (
+            <span style="color:#2563eb;">{chosen['C_maintenance']:.3f}</span>
+            + <span style="color:#ea580c;">{chosen['C_production']:.3f}</span>
+            + <span style="color:#9333ea;">{chosen['C_risk']:.3f}</span>
+            ) = <span style="color:#111827;">{chosen['decision_score']:.1f}</span>
             </div>
             """,
             unsafe_allow_html=True,
         )
-        st.caption("Simulation mapping: C_maintenance from mobilization cost, C_production from expected downtime impact, C_risk from residual risk × criticality context.")
+        st.caption("Simulation mapping: C_maintenance (normalized maintenance cost), C_production (normalized production impact), C_risk (normalized residual-risk exposure).")
         st.latex(r"P_{failure}=1-\frac{HealthScore}{100},\; Impact=Criticality\times DependencyWeight,\; C_{risk}\propto P_{failure}\times Impact\times(1-RedundancyFactor)")
 
 
