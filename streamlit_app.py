@@ -970,7 +970,6 @@ def main():
         kpi[2].metric("Predicted Time-to-Threshold (days)", f"{selected_asset['predicted_time_to_threshold']:.1f}")
         kpi[3].metric("Anomaly Score", f"{latest_row['anomaly_score']:.2f}", delta=f"{anomaly_delta:+.2f}")
         kpi[4].metric("Estimated Mobilization Cost", f"${selected_asset['mobilization_cost']:,.0f}")
-        st.caption("Summary uses latest record; Delta = latest - previous. Risk formula: risk_score = (systemic_priority_normalized*0.5 + (100-current_health)/100*0.3 + anomaly_score_normalized*0.2) * 100")
 
         overview_cols = ["asset_id", "asset_name", "subsystem", "criticality", "current_health", "anomaly_score", "systemic_priority", "risk_score"]
         risk_rank = model_df[overview_cols].sort_values(["subsystem", "risk_score"], ascending=[True, False]).copy()
@@ -1049,12 +1048,12 @@ def main():
 
         st.markdown("#### Draft · 5W Generator")
         st.markdown("<div class='gen-note'>Generate from the Draft text below, edit (human-in-the-loop), then submit to lock.</div>", unsafe_allow_html=True)
-        draft_col, arrow_col = st.columns([16, 2], vertical_alignment="top")
+        draft_col, action_col = st.columns([16, 3], vertical_alignment="top")
         with draft_col:
             st.text_area("Draft text", height=200, key="notif_assist_editor", label_visibility="collapsed")
-        with arrow_col:
+        with action_col:
             st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
-            generate_clicked = st.button("➡", key="generate_5w_btn", use_container_width=True)
+            generate_clicked = st.button("Generate 5W", key="generate_5w_btn", use_container_width=True)
             st.button("Clear", key="clear_draft_btn", on_click=_draft_clear, use_container_width=True)
 
         if generate_clicked:
@@ -1241,8 +1240,6 @@ def main():
 
     with tabs[3]:
         st.subheader("Health & PdM Signals")
-        
-        st.markdown(f"For **{selected_name}**, latest health is **{latest_row['health_index']:.1f}** with daily change **{health_delta:+.2f}**; estimated time to threshold: **{selected_asset['predicted_time_to_threshold']:.1f}** days.")
 
         asset_ts = ts_df[ts_df["asset_id"] == selected_asset["asset_id"]].sort_values("date").reset_index(drop=True).copy()
         asset_ts = sanitize_chart_df(asset_ts, ["date", "health_index", "anomaly_score"])
@@ -1495,7 +1492,12 @@ def main():
             c_rag_l, c_rag_r = st.columns([1.3, 1])
             with c_rag_l:
                 st.markdown("#### LLM-Generated RAG Answer")
-                st.info(st.session_state.get("rag_answer_cached", default_story))
+                rag_answer_text = st.session_state.get("rag_answer_cached", default_story)
+                if stream_render:
+                    st.markdown("##### Streaming Answer")
+                    typewriter_render(rag_answer_text, speed_ms=30)
+                else:
+                    st.info(rag_answer_text)
                 st.markdown("**Reference (scenario assumption):** IEEE C57.104:2019, elevated CO2 trend")
 
             with c_rag_r:
@@ -1512,24 +1514,32 @@ def main():
         else:
             st.info("Press **Submit Query** to generate the fault-analysis answer and display the triangle chart.")
 
-        st.markdown("#### Explainability")
-        explain = (
-            f"Decision context: TR1 current health **{float(tr_case['current_health']):.1f}**, risk score **{float(tr_case['risk_score']):.1f}**. "
-            f"System recommendation from options remains **{options_df.iloc[0]['option']}** with focus on preventing thermal escalation."
-        )
-        st.info(explain)
+        if st.session_state.get("rag_generated", False):
+            st.markdown("#### Explainability")
+            explain = (
+                f"Decision context: TR1 current health **{float(tr_case['current_health']):.1f}**, risk score **{float(tr_case['risk_score']):.1f}**. "
+                f"System recommendation from options remains **{options_df.iloc[0]['option']}** with focus on preventing thermal escalation."
+            )
+            st.info(explain)
 
     with tabs[6]:
         st.subheader("SAP Proposal Export")
-        
+        st.markdown("Export the aligned maintenance proposal payload for downstream ERP integration.")
 
-        st.json(sap_payload)
-        st.download_button(
-            label="Download JSON",
-            data=json.dumps(sap_payload, indent=2),
-            file_name=f"oracle_work_order_{selected_asset['asset_id']}.json",
-            mime="application/json",
-        )
+        export_col_l, export_col_r = st.columns([1.4, 1])
+        with export_col_l:
+            st.markdown("#### JSON Payload")
+            st.json(sap_payload)
+        with export_col_r:
+            st.markdown("#### Export Action")
+            st.download_button(
+                label="Download JSON",
+                data=json.dumps(sap_payload, indent=2),
+                file_name=f"oracle_work_order_{selected_asset['asset_id']}.json",
+                mime="application/json",
+                use_container_width=True,
+            )
+            st.caption("Payload structure is synchronized with current risk, recommendation, and standards outputs.")
 
         preview = pd.DataFrame(
             {
