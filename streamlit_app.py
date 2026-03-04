@@ -486,13 +486,13 @@ def evaluate_options(asset: pd.Series, risk_score: float, predicted_ttf: float, 
     for opt in options:
         residual = np.clip(risk_score - opt["risk_reduction"] * 0.65, 0, 100)
 
-        # 3C components (normalized to keep Decision Score in an interpretable 0-100-ish range)
-        c_maintenance = max(opt["mobilization_cost"] / 300000.0, 0.05)
-        c_production = max(opt["expected_downtime_hours"] / 120.0, 0.05)
-        c_risk = max((residual / 100.0) * (0.6 + 0.4 * crit), 0.05)
+        # 3C components (rescaled so denominator is usually >1 and ranking is stable/interpretable)
+        c_maintenance = max(opt["mobilization_cost"] / 150000.0, 0.10)
+        c_production = max(opt["expected_downtime_hours"] / 72.0, 0.05)
+        c_risk = max((residual / 100.0) * (0.8 + 0.6 * crit), 0.05)
 
         c_total = c_maintenance + c_production + c_risk
-        decision_score = float(np.clip(100.0 / c_total, 0, 100))
+        decision_score = float(100.0 / max(c_total, 1e-6))
 
         rows.append(
             {
@@ -1443,7 +1443,6 @@ def main():
             unsafe_allow_html=True,
         )
         st.caption("Simulation mapping: C_maintenance (normalized maintenance cost), C_production (normalized production impact), C_risk (normalized residual-risk exposure).")
-        st.latex(r"P_{failure}=1-\frac{HealthScore}{100},\; Impact=Criticality\times DependencyWeight,\; C_{risk}\propto P_{failure}\times Impact\times(1-RedundancyFactor)")
 
 
     with tabs[5]:
