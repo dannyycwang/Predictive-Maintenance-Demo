@@ -826,11 +826,11 @@ def main():
         llm_source = st.sidebar.radio(
             "LLM source",
             ["mock", "openai_api"],
-            index=0,
+            index=1,
             key="llm_source_radio",
             format_func=lambda x: {
                 "mock": "Mock (offline)",
-                "openai_api": "ChatGPT API",
+                "openai_api": "ChatGPT API (default)",
             }[x],
         )
 
@@ -842,6 +842,7 @@ def main():
 
     if use_openai_api:
         st.sidebar.caption("OpenAI API is paid. Configure key via Streamlit secrets or environment variables (do NOT commit keys).")
+        st.sidebar.success("Default provider: ChatGPT API")
         openai_model = st.sidebar.text_input("OpenAI model", value=get_secret_or_default("OPENAI_MODEL", "gpt-4o-mini"), key="openai_model_input")
         openai_endpoint = st.sidebar.text_input(
             "OpenAI endpoint",
@@ -1402,6 +1403,9 @@ def main():
                     rag_answer = rag_text
                 else:
                     st.warning(f"RAG LLM generation failed; using scenario baseline. Reason: {rag_err}")
+            else:
+                if use_openai_api:
+                    st.warning("RAG used baseline because OpenAI API key/endpoint is missing.")
             st.session_state["rag_answer_cached"] = rag_answer
             st.session_state["rag_generated"] = True
 
