@@ -701,6 +701,25 @@ def get_secret_or_default(key: str, default: str = "") -> str:
     return str(os.getenv(key, default))
 
 
+
+
+def get_first_config(keys: list[str], default: str = "") -> str:
+    """Read the first non-empty key from Streamlit secrets or environment variables."""
+    for key in keys:
+        val = get_secret_or_default(key, "")
+        if str(val).strip():
+            return str(val)
+    return default
+
+
+def normalize_api_key(raw_key: str) -> str:
+    """Trim whitespace and accidental surrounding quotes."""
+    key = (raw_key or "").strip()
+    if len(key) >= 2 and key[0] == key[-1] and key[0] in {'"', "'"}:
+        key = key[1:-1].strip()
+    return key
+
+
 def normalize_openai_endpoint(raw_endpoint: str) -> str:
     """Accept full chat-completions endpoint or base URL and normalize to /v1/chat/completions."""
     endpoint = (raw_endpoint or "").strip()
@@ -868,13 +887,17 @@ def main():
             help="You can paste either full endpoint or a base URL; app will normalize to /v1/chat/completions.",
         )
         openai_endpoint = normalize_openai_endpoint(openai_endpoint)
-        openai_api_key = get_secret_or_default("OPENAI_API_KEY", "")
+        openai_api_key = normalize_api_key(get_first_config(
+            ["OPENAI_API_KEY", "openai_api_key", "OPEN_API_KEY", "open_api_key"],
+            "",
+        ))
         st.sidebar.text_input(
             "OpenAI API key (managed)",
             value=("************" if openai_api_key else "Not configured"),
             disabled=True,
             key="openai_api_key_locked",
         )
+        st.sidebar.caption("Accepted secret names: OPENAI_API_KEY / openai_api_key / OPEN_API_KEY / open_api_key")
 
     st.sidebar.markdown("---")
     stream_render = st.sidebar.toggle("Typewriter output (ChatGPT-like)", value=True, key="typewriter_output")
@@ -927,7 +950,11 @@ def main():
 
     with tabs[0]:
         st.subheader("Overview")
-        
+        st.markdown("""
+        This view follows the **3C-based risk-constrained planning storyline**: 
+        **(1)** monitor asset health and context, **(2)** estimate system-aware risk, and **(3)** compare feasible intervention plans with transparent trade-offs.
+        """)
+        st.caption("Risk context here is aligned with HealthScore, Redundancy, and Dependency signals used by the CADENCE workflow.")
 
         st.markdown("---")
         c1, c2 = st.columns(2)
@@ -1344,10 +1371,21 @@ def main():
     with tabs[4]:
         st.subheader("Decision Orchestration")
         
+        st.markdown("""
+        **3.5 3C-Based Risk-Constrained Decision Layer**  
+        Objective: compare feasible plans using a unified 3C view — maintenance cost, production impact, and operational risk exposure.
+        """)
         st.markdown(f"Based on current conditions and the 3-month health projection toward the 40 threshold, the recommended strategy is **{options_df.iloc[0]['option']}**.")
 
+        # Keep existing scoring table, then add an explicit 3C simulation view for planner storytelling.
+        options_3c = options_df.copy()
+        options_3c["C_maintenance"] = (options_3c["mobilization_cost"] / 1000.0).round(1)
+        options_3c["C_production"] = (options_3c["expected_downtime_hours"] * 2.4).round(1)
+        options_3c["C_risk"] = ((options_3c["residual_risk"] / 100.0) * float(selected_asset["criticality"]) * 18.0).round(1)
+        options_3c["decision_score_3c"] = (options_3c["C_maintenance"] + options_3c["C_production"] + options_3c["C_risk"]).round(1)
+
         with st.expander("View strategy scoring details", expanded=False):
-            st.dataframe(options_df, use_container_width=True, hide_index=True)
+            st.dataframe(options_3c, use_container_width=True, hide_index=True)
         options_df_chart = sanitize_chart_df(options_df, ["option", "decision_score", "residual_risk"])
 
         score_chart = (
@@ -1381,6 +1419,32 @@ def main():
         best = options_df.iloc[0]
         rec_light = traffic_light_text(float(best["residual_risk"]), green_threshold, yellow_threshold).split()[0]
         st.success(f"Recommended Option: {best['option']} {rec_light} · Decision Score {best['decision_score']}")
+
+        st.markdown("#### 3C Formula Simulator (click one option)")
+        selected_option_name = st.radio(
+            "Candidate plan",
+            options_3c["option"].tolist(),
+            horizontal=True,
+            key="decision_formula_option",
+        )
+        chosen = options_3c.loc[options_3c["option"] == selected_option_name].iloc[0]
+
+        st.latex(r"Decision\ Score(P_j) = C_{maintenance}(P_j) + C_{production}(P_j) + C_{risk}(P_j)")
+        st.markdown(
+            f"""
+            <div style="font-size:1.75rem; font-weight:700; line-height:1.6;">
+            Decision Score({selected_option_name}) =
+            <span style="color:#2563eb;">{chosen['C_maintenance']:.1f}</span>
+            + <span style="color:#ea580c;">{chosen['C_production']:.1f}</span>
+            + <span style="color:#9333ea;">{chosen['C_risk']:.1f}</span>
+            = <span style="color:#111827;">{chosen['decision_score_3c']:.1f}</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.caption("Simulation mapping: C_maintenance from mobilization cost, C_production from expected downtime impact, C_risk from residual risk × criticality context.")
+        st.latex(r"P_{failure}=1-\frac{HealthScore}{100},\; Impact=Criticality\times DependencyWeight,\; C_{risk}\propto P_{failure}\times Impact\times(1-RedundancyFactor)")
+
 
     with tabs[5]:
         st.subheader("Standards (RAG) & Explainability")
