@@ -701,6 +701,23 @@ def get_secret_or_default(key: str, default: str = "") -> str:
     return str(os.getenv(key, default))
 
 
+def normalize_openai_endpoint(raw_endpoint: str) -> str:
+    """Accept full chat-completions endpoint or base URL and normalize to /v1/chat/completions."""
+    endpoint = (raw_endpoint or "").strip()
+    if not endpoint:
+        return "https://api.openai.com/v1/chat/completions"
+    endpoint = endpoint.rstrip("/")
+    if endpoint.endswith("/chat/completions"):
+        return endpoint
+    if endpoint.endswith("/v1"):
+        return f"{endpoint}/chat/completions"
+    if endpoint.endswith("/v1/chat"):
+        return f"{endpoint}/completions"
+    if endpoint.endswith("api.openai.com"):
+        return f"{endpoint}/v1/chat/completions"
+    return f"{endpoint}/v1/chat/completions"
+
+
 
 # ------------------------------
 # App UI
@@ -848,7 +865,9 @@ def main():
             "OpenAI endpoint",
             value=get_secret_or_default("OPENAI_API_ENDPOINT", "https://api.openai.com/v1/chat/completions"),
             key="openai_endpoint_input",
+            help="You can paste either full endpoint or a base URL; app will normalize to /v1/chat/completions.",
         )
+        openai_endpoint = normalize_openai_endpoint(openai_endpoint)
         openai_api_key = get_secret_or_default("OPENAI_API_KEY", "")
         st.sidebar.text_input(
             "OpenAI API key (managed)",
@@ -1010,7 +1029,7 @@ def main():
 
         if generate_clicked:
             user_note = st.session_state.get("notif_assist_editor", "")
-            if use_openai_api and openai_api_key.strip() and openai_endpoint.strip():
+            if use_openai_api and openai_api_key.strip():
                 ok, result_5w, err = call_openai_chatgpt_5w(
                     user_note,
                     selected_name,
@@ -1024,7 +1043,7 @@ def main():
                     result_5w = mock_mistral_5w(user_note, selected_name, selected_asset["subsystem"])
             else:
                 if use_openai_api:
-                    st.warning("OpenAI API key or endpoint not configured; switching to mock.")
+                    st.warning("OpenAI API key not configured; switching to mock.")
                 result_5w = mock_mistral_5w(user_note, selected_name, selected_asset["subsystem"])
 
             st.session_state["fivew_review"] = {
@@ -1392,7 +1411,7 @@ def main():
 
         if submit_rag:
             rag_answer = default_story
-            if use_openai_api and openai_api_key.strip() and openai_endpoint.strip():
+            if use_openai_api and openai_api_key.strip():
                 llm_q = (
                     f"{fixed_q} Use transformer TR1 with health index {float(tr_case['current_health']):.1f}. "
                     "Assume IEEE C57.104:2019 evidence indicates elevated CO2 and infer fault T1 thermal fault (T>300°C). "
@@ -1405,7 +1424,7 @@ def main():
                     st.warning(f"RAG LLM generation failed; using scenario baseline. Reason: {rag_err}")
             else:
                 if use_openai_api:
-                    st.warning("RAG used baseline because OpenAI API key/endpoint is missing.")
+                    st.warning("RAG used baseline because OpenAI API key is missing.")
             st.session_state["rag_answer_cached"] = rag_answer
             st.session_state["rag_generated"] = True
 
