@@ -1492,7 +1492,12 @@ def main():
             c_rag_l, c_rag_r = st.columns([1.3, 1])
             with c_rag_l:
                 st.markdown("#### LLM-Generated RAG Answer")
-                st.info(st.session_state.get("rag_answer_cached", default_story))
+                rag_answer_text = st.session_state.get("rag_answer_cached", default_story)
+                if stream_render:
+                    st.markdown("##### Streaming Answer")
+                    typewriter_render(rag_answer_text, speed_ms=30)
+                else:
+                    st.info(rag_answer_text)
                 st.markdown("**Reference (scenario assumption):** IEEE C57.104:2019, elevated CO2 trend")
 
             with c_rag_r:
