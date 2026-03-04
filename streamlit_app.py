@@ -746,18 +746,26 @@ def normalize_openai_endpoint(raw_endpoint: str) -> str:
 # ------------------------------
 
 def main():
-    st.set_page_config(page_title="CADENCE – Coordinated Asset Decision Engine", page_icon="🛰️", layout="wide")
+    st.set_page_config(page_title="CADENCE – Coordinated Asset Decision Engine", page_icon="🏢", layout="wide")
 
     st.markdown(
         """
         <style>
-            .oracle-card {padding: 0.65rem 0.9rem; border-radius: 0.8rem; border: 1px solid rgba(49,51,63,0.2); background: rgba(250,250,252,0.8);}
-            .oracle-sub {color: #667085; margin-top: -0.4rem; margin-bottom: 0.6rem;}
-            .gen-note {color:#667085;font-size:0.9rem;margin-top:-0.3rem;}
-            .cadence-wrap {text-align:center; margin-bottom:0.35rem;}
-            .cadence-main {font-size:2.2rem; font-weight:800; letter-spacing:0.02em; margin-bottom:0.2rem;}
-            .cadence-sub {font-size:1.2rem; margin-bottom:0.2rem;}
-            .cadence-tag {font-size:0.98rem; color:#667085;}
+            .stApp {background: linear-gradient(180deg, #F8FAFC 0%, #EEF2F7 100%); color:#0F172A;}
+            [data-testid="stSidebar"] {background: #0F172A; border-right: 1px solid rgba(148,163,184,0.25);}
+            [data-testid="stSidebar"] * {color: #E2E8F0 !important;}
+            [data-testid="stSidebar"] .stSelectbox label,
+            [data-testid="stSidebar"] .stSlider label,
+            [data-testid="stSidebar"] .stToggle label {font-weight:600;}
+            .gen-note {color:#64748B;font-size:0.9rem;margin-top:-0.3rem;}
+            .cadence-wrap {padding:1.0rem 1.2rem; margin:0.2rem 0 0.7rem; border:1px solid #CBD5E1; border-radius:14px; background:#FFFFFF;}
+            .cadence-main {font-size:2.0rem; font-weight:800; letter-spacing:0.015em; color:#0F172A;}
+            .cadence-sub {font-size:1.05rem; color:#334155; margin-top:0.15rem;}
+            .cadence-tag {font-size:0.92rem; color:#64748B; margin-top:0.2rem;}
+            div[data-testid="stMetric"] {background:#FFFFFF; border:1px solid #CBD5E1; border-radius:12px; padding:0.5rem 0.7rem;}
+            .stTabs [data-baseweb="tab-list"] {gap:6px;}
+            .stTabs [data-baseweb="tab"] {border-radius:10px 10px 0 0; background:#E2E8F0; padding:8px 14px;}
+            .stTabs [aria-selected="true"] {background:#1D4ED8 !important; color:white !important;}
         </style>
         """,
         unsafe_allow_html=True,
@@ -767,15 +775,15 @@ def main():
         """
         <div class='cadence-wrap'>
           <div class='cadence-main'>CADENCE</div>
-          <div class='cadence-sub'>Coordinated Asset Decision Engine</div>
-          <div class='cadence-tag'>- Aligning Maintenance with Operational Rhythm</div>
+          <div class='cadence-sub'>Executive Maintenance Decision Intelligence</div>
+          <div class='cadence-tag'>Professional demo for risk-aware, standards-guided maintenance orchestration</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
     with st.sidebar:
-        st.header("Controls")
+        st.header("Executive Controls")
         scenario = st.selectbox("Scenario", ["Offshore expensive", "Onshore cheaper"], help="Changes mobilization cost multipliers.")
         demo_mode = st.toggle("Demo Mode (randomize mock data)", value=True, key="demo_mode_toggle")
 
@@ -855,55 +863,16 @@ def main():
     planned_window = st.sidebar.selectbox("Planned Window (Option C)", planned_windows)
 
     st.sidebar.markdown("---")
-    st.sidebar.subheader("LLM Runtime")
-    online_mode = bool(st.session_state.get("_online_mode", False))
+    llm_source = str(get_secret_or_default("LLM_SOURCE", "openai_api")).strip().lower()
+    use_openai_api = llm_source != "mock"
+    openai_model = str(get_secret_or_default("OPENAI_MODEL", "gpt-4o-mini"))
+    openai_endpoint = normalize_openai_endpoint(get_secret_or_default("OPENAI_API_ENDPOINT", "https://api.openai.com/v1/chat/completions"))
+    openai_api_key = normalize_api_key(get_first_config(
+        ["OPENAI_API_KEY", "openai_api_key", "OPEN_API_KEY", "open_api_key"],
+        "",
+    ))
 
-    if online_mode:
-        st.sidebar.caption("Online mode: use ChatGPT API (for Streamlit Cloud).")
-        llm_source = "openai_api"
-    else:
-        llm_source = st.sidebar.radio(
-            "LLM source",
-            ["mock", "openai_api"],
-            index=1,
-            key="llm_source_radio",
-            format_func=lambda x: {
-                "mock": "Mock (offline)",
-                "openai_api": "ChatGPT API (default)",
-            }[x],
-        )
-
-    use_openai_api = llm_source == "openai_api"
-
-    openai_model = "gpt-4o-mini"
-    openai_endpoint = "https://api.openai.com/v1/chat/completions"
-    openai_api_key = ""
-
-    if use_openai_api:
-        st.sidebar.caption("OpenAI API is paid. Configure key via Streamlit secrets or environment variables (do NOT commit keys).")
-        st.sidebar.success("Default provider: ChatGPT API")
-        openai_model = st.sidebar.text_input("OpenAI model", value=get_secret_or_default("OPENAI_MODEL", "gpt-4o-mini"), key="openai_model_input")
-        openai_endpoint = st.sidebar.text_input(
-            "OpenAI endpoint",
-            value=get_secret_or_default("OPENAI_API_ENDPOINT", "https://api.openai.com/v1/chat/completions"),
-            key="openai_endpoint_input",
-            help="You can paste either full endpoint or a base URL; app will normalize to /v1/chat/completions.",
-        )
-        openai_endpoint = normalize_openai_endpoint(openai_endpoint)
-        openai_api_key = normalize_api_key(get_first_config(
-            ["OPENAI_API_KEY", "openai_api_key", "OPEN_API_KEY", "open_api_key"],
-            "",
-        ))
-        st.sidebar.text_input(
-            "OpenAI API key (managed)",
-            value=("************" if openai_api_key else "Not configured"),
-            disabled=True,
-            key="openai_api_key_locked",
-        )
-        st.sidebar.caption("Accepted secret names: OPENAI_API_KEY / openai_api_key / OPEN_API_KEY / open_api_key")
-
-    st.sidebar.markdown("---")
-    stream_render = st.sidebar.toggle("Typewriter output (ChatGPT-like)", value=True, key="typewriter_output")
+    stream_render = str(get_secret_or_default("TYPEWRITER_OUTPUT", "true")).strip().lower() not in {"0", "false", "no"}
 
     options_df = evaluate_options(
         selected_asset,
