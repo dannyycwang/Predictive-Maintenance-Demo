@@ -946,8 +946,8 @@ def main():
         "Notification Assist (5W)",
         "Asset Risk Graph",
         "Health & PdM Signals",
-        "Decision Orchestration",
         "Standards (RAG) & Explainability",
+        "Decision Orchestration",
         "SAP Proposal Export",
     ])
 
@@ -1371,7 +1371,7 @@ def main():
                 hide_index=True,
             )
 
-    with tabs[4]:
+    with tabs[5]:
         st.subheader("Decision Orchestration")
         
         st.markdown("""
@@ -1445,7 +1445,7 @@ def main():
         st.caption("Simulation mapping: C_maintenance (normalized maintenance cost), C_production (normalized production impact), C_risk (normalized residual-risk exposure).")
 
 
-    with tabs[5]:
+    with tabs[4]:
         st.subheader("Standards (RAG) & Explainability")
 
         tr_case = model_df.loc[model_df["asset_id"] == "TR1"].iloc[0]
