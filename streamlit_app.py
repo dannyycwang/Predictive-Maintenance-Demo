@@ -985,7 +985,7 @@ def main():
 
     if selected_tab == "Overview":
         st.subheader("Overview")
-        render_tab_guide("overview", "This page gives the executive snapshot: live health, risk deltas, anomaly changes, and subsystem ranking so leaders can align attention before jumping into detailed analysis.")
+        #render_tab_guide("overview", "This page gives the executive snapshot: live health, risk deltas, anomaly changes, and subsystem ranking so leaders can align attention before jumping into detailed analysis.")
         st.markdown("""
         This view follows the **3C-based risk-constrained planning storyline**: 
         **(1)** monitor asset health and context, **(2)** estimate system-aware risk, and **(3)** compare feasible intervention plans with transparent trade-offs.
