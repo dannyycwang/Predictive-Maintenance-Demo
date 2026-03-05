@@ -695,6 +695,20 @@ def typewriter_render(text: str, speed_ms: int = 36):
     return buff
 
 
+def render_tab_guide(tab_key: str, text: str, speed_ms: int = 42):
+    """Render a per-tab one-time typewriter guide, then keep static summary."""
+    state_key = f"tab_guide_played_{tab_key}"
+    if state_key not in st.session_state:
+        st.session_state[state_key] = False
+
+    st.markdown("<div class='cadence-mini-title'>PAGE GUIDE</div>", unsafe_allow_html=True)
+    if not st.session_state[state_key]:
+        typewriter_render(text, speed_ms=speed_ms)
+        st.session_state[state_key] = True
+    else:
+        st.caption(text)
+
+
 def get_secret_or_default(key: str, default: str = "") -> str:
     try:
         if key in st.secrets:
@@ -925,7 +939,9 @@ def main():
     ])
 
     with tabs[0]:
+        render_tab_guide("overview", "This page gives the executive snapshot: live health, risk deltas, anomaly changes, and subsystem ranking so leaders can align attention before jumping into detailed analysis.")
         st.subheader("Overview")
+        render_tab_guide("overview", "This page gives the executive snapshot: live health, risk deltas, anomaly changes, and subsystem ranking so leaders can align attention before jumping into detailed analysis.")
         st.markdown("""
         This view follows the **3C-based risk-constrained planning storyline**: 
         **(1)** monitor asset health and context, **(2)** estimate system-aware risk, and **(3)** compare feasible intervention plans with transparent trade-offs.
@@ -993,7 +1009,9 @@ def main():
             )
 
     with tabs[1]:
+        render_tab_guide("notification", "This page standardizes raw operator notes into structured 5W statements (What, When, Where, Who, Why), improving downstream model quality, traceability, and handover clarity.")
         st.subheader("Notification Assist (5W)")
+        render_tab_guide("notification", "This page standardizes raw operator notes into structured 5W statements (What, When, Where, Who, Why), improving downstream model quality, traceability, and handover clarity.")
 
         top_left, top_right = st.columns([1.3, 1])
         with top_left:
@@ -1084,7 +1102,9 @@ def main():
                 st.success("5W submitted and locked.")
 
     with tabs[2]:
+        render_tab_guide("risk_graph", "This page visualizes dependency and propagation. Use it to understand how one asset's degradation can cascade through connected equipment and amplify operational impact.")
         st.subheader("Asset Risk Graph")
+        render_tab_guide("risk_graph", "This page visualizes dependency and propagation. Use it to understand how one asset's degradation can cascade through connected equipment and amplify operational impact.")
         
 
         layout_df = build_layout_positions(assets_df).merge(
@@ -1212,6 +1232,7 @@ def main():
             st.code("\n".join(adjacency_lines), language="text")
 
     with tabs[3]:
+        render_tab_guide("signals", "This page focuses on time-series health and anomaly behavior, including projection toward threshold crossing, so maintenance windows can be prepared before critical deterioration.")
         st.subheader("Health & PdM Signals")
 
         asset_ts = ts_df[ts_df["asset_id"] == selected_asset["asset_id"]].sort_values("date").reset_index(drop=True).copy()
@@ -1342,7 +1363,9 @@ def main():
             )
 
     with tabs[5]:
+        render_tab_guide("decision", "This page compares intervention options using the 3C lens—maintenance cost, production impact, and residual risk—so planners can select the most balanced strategy.")
         st.subheader("Decision Orchestration")
+        render_tab_guide("decision", "This page compares intervention options using the 3C lens—maintenance cost, production impact, and residual risk—so planners can select the most balanced strategy.")
         
         st.markdown("""
         **3.5 3C-Based Risk-Constrained Decision Layer**  
@@ -1416,7 +1439,9 @@ def main():
 
 
     with tabs[4]:
+        render_tab_guide("rag", "This page combines standards-grounded retrieval with explainable LLM reasoning to summarize likely fault hypotheses, references, and context-aware recommendations.")
         st.subheader("Standards (RAG) & Explainability")
+        render_tab_guide("rag", "This page combines standards-grounded retrieval with explainable LLM reasoning to summarize likely fault hypotheses, references, and context-aware recommendations.")
 
         tr_case = model_df.loc[model_df["asset_id"] == "TR1"].iloc[0]
         fixed_q = "For example, a power transformer health goes down. We are going to check the potential faults."
@@ -1496,6 +1521,7 @@ def main():
             st.info(explain)
 
     with tabs[6]:
+        render_tab_guide("sap_export", "This page packages the selected recommendation, risk context, and standards references into an ERP-ready payload for maintenance execution and planner approval workflows.")
         st.subheader("SAP Proposal Export")
         st.markdown("Export the aligned maintenance proposal payload for downstream ERP integration.")
 
