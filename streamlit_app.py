@@ -1500,10 +1500,10 @@ def main():
         st.subheader("RAG & Explainability")
 
         tr_case = model_df.loc[model_df["asset_id"] == "TR1"].iloc[0]
-        fixed_q = "For example, a power transformer health goes down. We are going to check the potential faults."
+        fixed_q = "What is the most likely potential fault code at present?"
 
-        st.markdown("#### Transformer Fault Storyline")
-        st.text_input("Story prompt", value=fixed_q, disabled=True, key="fixed_fault_question")
+        st.markdown("#### Transformer Fault Storyline · For example, a power transformer health goes down. We are going to check the potential faults.")
+        st.text_input("Query prompt", value=fixed_q, disabled=True, key="fixed_fault_question")
 
         default_story = (
             f"Transformer case (TR1): current health index is {float(tr_case['current_health']):.1f}. "
