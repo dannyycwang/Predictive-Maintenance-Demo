@@ -840,17 +840,6 @@ def main():
         key="main_tab_nav",
     )
 
-    st.markdown(
-        """
-        <div class='cadence-wrap'>
-          <div class='cadence-main'>CADENCE</div>
-          <div class='cadence-sub'>Coordinated Asset DECision Engine</div>
-          <div class='cadence-tag'>Professional demo for risk-aware, standards-guided maintenance orchestration</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
     header_l, header_r = st.columns([5.3, 2.0], vertical_alignment="center")
     with header_l:
         st.markdown(
