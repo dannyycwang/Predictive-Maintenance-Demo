@@ -695,6 +695,20 @@ def typewriter_render(text: str, speed_ms: int = 36):
     return buff
 
 
+def render_tab_guide(tab_key: str, text: str, speed_ms: int = 42):
+    """Render a per-tab one-time typewriter guide, then keep static summary."""
+    state_key = f"tab_guide_played_{tab_key}"
+    if state_key not in st.session_state:
+        st.session_state[state_key] = False
+
+    st.markdown("<div class='cadence-mini-title'>PAGE GUIDE</div>", unsafe_allow_html=True)
+    if not st.session_state[state_key]:
+        typewriter_render(text, speed_ms=speed_ms)
+        st.session_state[state_key] = True
+    else:
+        st.caption(text)
+
+
 def get_secret_or_default(key: str, default: str = "") -> str:
     try:
         if key in st.secrets:
@@ -973,6 +987,7 @@ def main():
 
     if selected_tab == "Overview":
         st.subheader("Overview")
+        render_tab_guide("overview", "This page gives the executive snapshot: live health, risk deltas, anomaly changes, and subsystem ranking so leaders can align attention before jumping into detailed analysis.")
         st.markdown("""
         This view follows the **3C-based risk-constrained planning storyline**: 
         **(1)** monitor asset health and context, **(2)** estimate system-aware risk, and **(3)** compare feasible intervention plans with transparent trade-offs.
