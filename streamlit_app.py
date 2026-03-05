@@ -787,16 +787,29 @@ def main():
         unsafe_allow_html=True,
     )
 
-    st.markdown(
-        """
-        <div class='cadence-wrap'>
-          <div class='cadence-main'>CADENCE</div>
-          <div class='cadence-sub'>Coordinated Asset DECision Engine</div>
-          <div class='cadence-tag'>Professional demo for risk-aware, standards-guided maintenance orchestration</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    header_l, header_r = st.columns([5.3, 2.0], vertical_alignment="center")
+    with header_l:
+        st.markdown(
+            """
+            <div class='cadence-wrap'>
+              <div class='cadence-main'>CADENCE</div>
+              <div class='cadence-sub'>Coordinated Asset DECision Engine</div>
+              <div class='cadence-tag'>Professional demo for risk-aware, standards-guided maintenance orchestration</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with header_r:
+        st.markdown("<div class='cadence-mini-title'>PAGE GUIDE</div>", unsafe_allow_html=True)
+        guide_text = (
+            "Start with Overview to read current health and risk movement, then use Notification Assist "
+            "to structure field observations into reliable 5W records. Continue to Asset Risk Graph and "
+            "Health & PdM Signals to understand propagation and trend momentum, then validate hypotheses "
+            "in Standards (RAG) & Explainability. Finally, compare strategies in Decision Orchestration "
+            "and export an ERP-ready payload from SAP Proposal Export."
+        )
+        typewriter_render(guide_text, speed_ms=95)
 
     with st.sidebar:
         st.header("Executive Controls")
