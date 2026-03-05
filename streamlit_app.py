@@ -776,8 +776,6 @@ def main():
             .cadence-main {font-size:2.0rem; font-weight:800; letter-spacing:0.015em; color:#0F172A;}
             .cadence-sub {font-size:1.05rem; color:#334155; margin-top:0.15rem;}
             .cadence-tag {font-size:0.92rem; color:#64748B; margin-top:0.2rem;}
-            .cadence-mini-title {font-size:0.76rem; font-weight:700; letter-spacing:0.02em; color:#64748B; margin-top:0.25rem;}
-            .cadence-mini-box {font-size:0.82rem; color:#334155; min-height:2.3rem; border:1px dashed #CBD5E1; border-radius:8px; background:#F8FAFC; padding:0.4rem 0.55rem;}
             div[data-testid="stMetric"] {background:#FFFFFF; border:1px solid #CBD5E1; border-radius:12px; padding:0.5rem 0.7rem;}
             .stTabs [data-baseweb="tab-list"] {gap:6px;}
             .stTabs [data-baseweb="tab"] {border-radius:10px 10px 0 0; background:#E2E8F0; padding:8px 14px;}
@@ -840,6 +838,17 @@ def main():
         horizontal=True,
         label_visibility="collapsed",
         key="main_tab_nav",
+    )
+
+    st.markdown(
+        """
+        <div class='cadence-wrap'>
+          <div class='cadence-main'>CADENCE</div>
+          <div class='cadence-sub'>Coordinated Asset DECision Engine</div>
+          <div class='cadence-tag'>Professional demo for risk-aware, standards-guided maintenance orchestration</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
     header_l, header_r = st.columns([5.3, 2.0], vertical_alignment="center")
