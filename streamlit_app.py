@@ -1203,18 +1203,39 @@ def main():
             step=0.1,
             key="impact_health_slider",
         )
-        health_ratio = 0.0 if current_h <= 0 else float(np.clip(sim_health / current_h, 0, 1.5))
+        # Map lower health -> higher propagation stress (and vice versa).
+        base_stress = max(100.0 - current_h, 1e-6)
+        sim_stress = max(100.0 - float(sim_health), 0.0)
+        health_ratio = float(np.clip(sim_stress / base_stress, 0.0, 2.0))
 
-        impacted_sim = int(round(base_impacted_count * health_ratio))
-        impacted_sim = max(0, min(base_impacted_count, impacted_sim))
+        # Count impacted downstream assets using a relative-strength cutoff so
+        # improved health can reduce impacted count while deterioration keeps/expands influence.
+        downstream_strengths = [
+            float(v)
+            for aid, v in impact_base.items()
+            if aid != sim_asset["asset_id"] and float(v) > 0
+        ]
+        if downstream_strengths:
+            cutoff = min(downstream_strengths) * 0.95
+            impacted_sim = int(sum((s * health_ratio) >= cutoff for s in downstream_strengths))
+        else:
+            impacted_sim = 0
 
         c_imp1, c_imp2, c_imp3 = st.columns(3)
         c_imp1.metric("Base impacted assets", f"{base_impacted_count}")
         c_imp2.metric("Simulated impacted assets", f"{impacted_sim}", delta=f"{impacted_sim - base_impacted_count:+d}")
         c_imp3.metric("Simulated health", f"{sim_health:.1f}", delta=f"{sim_health - current_h:+.1f}")
 
+        if sim_health < current_h:
+            health_trend_txt = "drops"
+        elif sim_health > current_h:
+            health_trend_txt = "rises"
+        else:
+            health_trend_txt = "stays"
+
         st.markdown(
-            f"Asset **{sim_asset_name}** current health is **{current_h:.1f}**. When health drops to **{sim_health:.1f}**, estimated impacted downstream assets change from **{base_impacted_count}** to **{impacted_sim}**."
+            f"Asset **{sim_asset_name}** current health is **{current_h:.1f}**. "
+            f"When health {health_trend_txt} to **{sim_health:.1f}**, estimated impacted downstream assets change from **{base_impacted_count}** to **{impacted_sim}**."
         )
 
         impact_table = layout_df[["asset_id", "asset_name", "subsystem"]].copy()
