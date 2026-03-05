@@ -845,17 +845,6 @@ def main():
     if "fivew_finalized" not in st.session_state:
         st.session_state["fivew_finalized"] = False
 
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("Active Notification (Pipeline Input)")
-    st.sidebar.caption("Risk scoring, standards retrieval, and SAP export all use this notification text.")
-    st.sidebar.text_area(
-        "Active Notification",
-        value=st.session_state["main_notification_text"],
-        height=120,
-        disabled=True,
-        key="active_notification_preview",
-    )
-
     parsed_notification = parse_notification(st.session_state["main_notification_text"], selected_asset)
 
     defer_weeks = st.sidebar.slider("Weeks to defer (Option B)", 1, 12, 4)
@@ -1415,10 +1404,10 @@ def main():
         st.subheader("Standards (RAG) & Explainability")
 
         tr_case = model_df.loc[model_df["asset_id"] == "TR1"].iloc[0]
-        fixed_q = "What is the most likely current potential fault? (Please answer in English.)"
+        fixed_q = "For example, a power transformer health goes down. We are going to check the potential faults."
 
-        st.markdown("#### Fixed Transformer Fault Query")
-        st.text_input("Locked question", value=fixed_q, disabled=True, key="fixed_fault_question")
+        st.markdown("#### Transformer Fault Storyline")
+        st.text_input("Story prompt", value=fixed_q, disabled=True, key="fixed_fault_question")
 
         default_story = (
             f"Transformer case (TR1): current health index is {float(tr_case['current_health']):.1f}. "
