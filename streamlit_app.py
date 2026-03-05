@@ -782,6 +782,44 @@ def main():
             .stTabs [data-baseweb="tab-list"] {gap:6px;}
             .stTabs [data-baseweb="tab"] {border-radius:10px 10px 0 0; background:#E2E8F0; padding:8px 14px;}
             .stTabs [aria-selected="true"] {background:#1D4ED8 !important; color:white !important;}
+
+            /* Make horizontal radio navigation look like tabs */
+            div[role="radiogroup"] {
+                gap: 0.35rem;
+                border-bottom: 1px solid #CBD5E1;
+                padding-bottom: 0.08rem;
+                margin-bottom: 0.55rem;
+            }
+            div[role="radiogroup"] > label {
+                margin: 0 !important;
+                padding: 0 !important;
+                background: transparent !important;
+            }
+            div[role="radiogroup"] > label > div:first-child {
+                display: none;
+            }
+            div[role="radiogroup"] > label > div:last-child {
+                background: #E2E8F0;
+                border: 1px solid #CBD5E1;
+                border-bottom: none;
+                border-radius: 10px 10px 0 0;
+                padding: 0.50rem 0.85rem;
+                transition: all 0.16s ease;
+            }
+            div[role="radiogroup"] > label p {
+                margin: 0 !important;
+                font-weight: 600;
+                font-size: 0.92rem;
+                color: #475569;
+            }
+            div[role="radiogroup"] > label:has(input:checked) > div:last-child {
+                background: #1D4ED8;
+                border-color: #1D4ED8;
+                box-shadow: 0 2px 8px rgba(29,78,216,0.18);
+            }
+            div[role="radiogroup"] > label:has(input:checked) p {
+                color: #FFFFFF;
+            }
         </style>
         """,
         unsafe_allow_html=True,
