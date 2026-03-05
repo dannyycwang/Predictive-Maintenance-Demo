@@ -803,13 +803,13 @@ def main():
                 border: 1px solid #CBD5E1;
                 border-bottom: none;
                 border-radius: 10px 10px 0 0;
-                padding: 0.50rem 0.85rem;
+                padding: 0.42rem 0.62rem;
                 transition: all 0.16s ease;
             }
             div[role="radiogroup"] > label p {
                 margin: 0 !important;
                 font-weight: 600;
-                font-size: 0.92rem;
+                font-size: 0.82rem;
                 color: #475569;
             }
             div[role="radiogroup"] > label:has(input:checked) > div:last-child {
@@ -827,12 +827,12 @@ def main():
 
     tab_labels = [
         "Overview",
-        "Notification Assist (5W)",
-        "Asset Risk Graph",
-        "Health & PdM Signals",
-        "Standards (RAG) & Explainability",
-        "Decision Orchestration",
-        "SAP Proposal Export",
+        "Notification (5W)",
+        "Risk Graph",
+        "Health Signals",
+        "RAG & Explainability",
+        "Decision",
+        "SAP Export",
     ]
     selected_tab = st.radio(
         "Navigation",
@@ -859,12 +859,12 @@ def main():
         st.markdown("<div class='cadence-mini-title'>PAGE GUIDE</div>", unsafe_allow_html=True)
         guide_text_map = {
             "Overview": "Overview summarizes current health, risk deltas, anomaly movement, and subsystem ranking so leadership can focus on the most exposed assets first.",
-            "Notification Assist (5W)": "Notification Assist converts operator notes into structured 5W records—What, When, Where, Who, Why—to improve data quality for downstream diagnosis and action.",
-            "Asset Risk Graph": "Asset Risk Graph explains dependency and cascade pathways, helping teams understand how degradation in one node can propagate to downstream systems.",
-            "Health & PdM Signals": "Health & PdM Signals shows trend trajectory, anomaly evolution, and threshold crossing projection, supporting proactive maintenance planning.",
-            "Standards (RAG) & Explainability": "RAG & Explainability combines standards references with model reasoning to present likely fault hypotheses and transparent decision context.",
-            "Decision Orchestration": "Decision Orchestration compares options under the 3C lens—maintenance cost, production impact, and residual risk—to identify the most balanced plan.",
-            "SAP Proposal Export": "SAP Proposal Export packages recommendation, risk context, and references into an ERP-ready payload for planner approval and execution handoff.",
+            "Notification (5W)": "Notification Assist converts operator notes into structured 5W records—What, When, Where, Who, Why—to improve data quality for downstream diagnosis and action.",
+            "Risk Graph": "Asset Risk Graph explains dependency and cascade pathways, helping teams understand how degradation in one node can propagate to downstream systems.",
+            "Health Signals": "Health & PdM Signals shows trend trajectory, anomaly evolution, and threshold crossing projection, supporting proactive maintenance planning.",
+            "RAG & Explainability": "RAG & Explainability combines standards references with model reasoning to present likely fault hypotheses and transparent decision context.",
+            "Decision": "Decision Orchestration compares options under the 3C lens—maintenance cost, production impact, and residual risk—to identify the most balanced plan.",
+            "SAP Export": "SAP Proposal Export packages recommendation, risk context, and references into an ERP-ready payload for planner approval and execution handoff.",
         }
         typewriter_render(guide_text_map.get(selected_tab, ""), speed_ms=110)
 
@@ -1054,9 +1054,8 @@ def main():
                 hide_index=True,
             )
 
-    elif selected_tab == "Notification Assist (5W)":
-        st.subheader("Notification Assist (5W)")
-        render_tab_guide("notification", "This page standardizes raw operator notes into structured 5W statements (What, When, Where, Who, Why), improving downstream model quality, traceability, and handover clarity.")
+    elif selected_tab == "Notification (5W)":
+        st.subheader("Notification (5W)")
 
         top_left, top_right = st.columns([1.3, 1])
         with top_left:
@@ -1146,9 +1145,8 @@ def main():
                 st.session_state["fivew_finalized"] = True
                 st.success("5W submitted and locked.")
 
-    elif selected_tab == "Asset Risk Graph":
-        st.subheader("Asset Risk Graph")
-        render_tab_guide("risk_graph", "This page visualizes dependency and propagation. Use it to understand how one asset's degradation can cascade through connected equipment and amplify operational impact.")
+    elif selected_tab == "Risk Graph":
+        st.subheader("Risk Graph")
         
 
         layout_df = build_layout_positions(assets_df).merge(
@@ -1275,8 +1273,8 @@ def main():
             st.markdown("**Adjacency List (with propagation weights)**")
             st.code("\n".join(adjacency_lines), language="text")
 
-    elif selected_tab == "Health & PdM Signals":
-        st.subheader("Health & PdM Signals")
+    elif selected_tab == "Health Signals":
+        st.subheader("Health Signals")
 
         asset_ts = ts_df[ts_df["asset_id"] == selected_asset["asset_id"]].sort_values("date").reset_index(drop=True).copy()
         asset_ts = sanitize_chart_df(asset_ts, ["date", "health_index", "anomaly_score"])
@@ -1405,9 +1403,8 @@ def main():
                 hide_index=True,
             )
 
-    elif selected_tab == "Decision Orchestration":
-        st.subheader("Decision Orchestration")
-        render_tab_guide("decision", "This page compares intervention options using the 3C lens—maintenance cost, production impact, and residual risk—so planners can select the most balanced strategy.")
+    elif selected_tab == "Decision":
+        st.subheader("Decision")
         
         st.markdown("""
         **3.5 3C-Based Risk-Constrained Decision Layer**  
@@ -1480,9 +1477,8 @@ def main():
         st.caption("Simulation mapping: C_maintenance (normalized maintenance cost), C_production (normalized production impact), C_risk (normalized residual-risk exposure).")
 
 
-    elif selected_tab == "Standards (RAG) & Explainability":
-        st.subheader("Standards (RAG) & Explainability")
-        render_tab_guide("rag", "This page combines standards-grounded retrieval with explainable LLM reasoning to summarize likely fault hypotheses, references, and context-aware recommendations.")
+    elif selected_tab == "RAG & Explainability":
+        st.subheader("RAG & Explainability")
 
         tr_case = model_df.loc[model_df["asset_id"] == "TR1"].iloc[0]
         fixed_q = "For example, a power transformer health goes down. We are going to check the potential faults."
@@ -1561,8 +1557,8 @@ def main():
             )
             st.info(explain)
 
-    elif selected_tab == "SAP Proposal Export":
-        st.subheader("SAP Proposal Export")
+    elif selected_tab == "SAP Export":
+        st.subheader("SAP Export")
         st.markdown("Export the aligned maintenance proposal payload for downstream ERP integration.")
 
         export_col_l, export_col_r = st.columns([1.4, 1])
