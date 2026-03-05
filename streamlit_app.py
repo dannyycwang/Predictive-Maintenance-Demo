@@ -701,7 +701,7 @@ def render_tab_guide(tab_key: str, text: str, speed_ms: int = 42):
     if state_key not in st.session_state:
         st.session_state[state_key] = False
 
-    st.markdown("<div class='cadence-mini-title'>Quick Guide</div>", unsafe_allow_html=True)
+    st.markdown("<div class='cadence-mini-title'>PAGE GUIDE</div>", unsafe_allow_html=True)
     if not st.session_state[state_key]:
         typewriter_render(text, speed_ms=speed_ms)
         st.session_state[state_key] = True
@@ -787,29 +787,16 @@ def main():
         unsafe_allow_html=True,
     )
 
-    header_l, header_r = st.columns([5.3, 2.0], vertical_alignment="center")
-    with header_l:
-        st.markdown(
-            """
-            <div class='cadence-wrap'>
-              <div class='cadence-main'>CADENCE</div>
-              <div class='cadence-sub'>Coordinated Asset DECision Engine</div>
-              <div class='cadence-tag'>Professional demo for risk-aware, standards-guided maintenance orchestration</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    with header_r:
-        st.markdown("<div class='cadence-mini-title'>PAGE GUIDE</div>", unsafe_allow_html=True)
-        guide_text = "Welcome to CADENCE. This demo walks you from monitoring and notification quality, to graph-based risk understanding, standards-based reasoning, decision orchestration, and finally ERP-ready SAP proposal export."
-        if "header_guide_played" not in st.session_state:
-            st.session_state["header_guide_played"] = False
-        if not st.session_state["header_guide_played"]:
-            typewriter_render(guide_text, speed_ms=34)
-            st.session_state["header_guide_played"] = True
-        else:
-            st.caption(guide_text)
+    st.markdown(
+        """
+        <div class='cadence-wrap'>
+          <div class='cadence-main'>CADENCE</div>
+          <div class='cadence-sub'>Coordinated Asset DECision Engine</div>
+          <div class='cadence-tag'>Professional demo for risk-aware, standards-guided maintenance orchestration</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     with st.sidebar:
         st.header("Executive Controls")
@@ -939,6 +926,7 @@ def main():
     ])
 
     with tabs[0]:
+        render_tab_guide("overview", "This page gives the executive snapshot: live health, risk deltas, anomaly changes, and subsystem ranking so leaders can align attention before jumping into detailed analysis.")
         st.subheader("Overview")
         render_tab_guide("overview", "This page gives the executive snapshot: live health, risk deltas, anomaly changes, and subsystem ranking so leaders can align attention before jumping into detailed analysis.")
         st.markdown("""
@@ -1008,6 +996,7 @@ def main():
             )
 
     with tabs[1]:
+        render_tab_guide("notification", "This page standardizes raw operator notes into structured 5W statements (What, When, Where, Who, Why), improving downstream model quality, traceability, and handover clarity.")
         st.subheader("Notification Assist (5W)")
         render_tab_guide("notification", "This page standardizes raw operator notes into structured 5W statements (What, When, Where, Who, Why), improving downstream model quality, traceability, and handover clarity.")
 
@@ -1100,6 +1089,7 @@ def main():
                 st.success("5W submitted and locked.")
 
     with tabs[2]:
+        render_tab_guide("risk_graph", "This page visualizes dependency and propagation. Use it to understand how one asset's degradation can cascade through connected equipment and amplify operational impact.")
         st.subheader("Asset Risk Graph")
         render_tab_guide("risk_graph", "This page visualizes dependency and propagation. Use it to understand how one asset's degradation can cascade through connected equipment and amplify operational impact.")
         
@@ -1229,8 +1219,8 @@ def main():
             st.code("\n".join(adjacency_lines), language="text")
 
     with tabs[3]:
-        st.subheader("Health & PdM Signals")
         render_tab_guide("signals", "This page focuses on time-series health and anomaly behavior, including projection toward threshold crossing, so maintenance windows can be prepared before critical deterioration.")
+        st.subheader("Health & PdM Signals")
 
         asset_ts = ts_df[ts_df["asset_id"] == selected_asset["asset_id"]].sort_values("date").reset_index(drop=True).copy()
         asset_ts = sanitize_chart_df(asset_ts, ["date", "health_index", "anomaly_score"])
@@ -1360,6 +1350,7 @@ def main():
             )
 
     with tabs[5]:
+        render_tab_guide("decision", "This page compares intervention options using the 3C lens—maintenance cost, production impact, and residual risk—so planners can select the most balanced strategy.")
         st.subheader("Decision Orchestration")
         render_tab_guide("decision", "This page compares intervention options using the 3C lens—maintenance cost, production impact, and residual risk—so planners can select the most balanced strategy.")
         
@@ -1435,6 +1426,7 @@ def main():
 
 
     with tabs[4]:
+        render_tab_guide("rag", "This page combines standards-grounded retrieval with explainable LLM reasoning to summarize likely fault hypotheses, references, and context-aware recommendations.")
         st.subheader("Standards (RAG) & Explainability")
         render_tab_guide("rag", "This page combines standards-grounded retrieval with explainable LLM reasoning to summarize likely fault hypotheses, references, and context-aware recommendations.")
 
@@ -1516,8 +1508,8 @@ def main():
             st.info(explain)
 
     with tabs[6]:
-        st.subheader("SAP Proposal Export")
         render_tab_guide("sap_export", "This page packages the selected recommendation, risk context, and standards references into an ERP-ready payload for maintenance execution and planner approval workflows.")
+        st.subheader("SAP Proposal Export")
         st.markdown("Export the aligned maintenance proposal payload for downstream ERP integration.")
 
         export_col_l, export_col_r = st.columns([1.4, 1])
