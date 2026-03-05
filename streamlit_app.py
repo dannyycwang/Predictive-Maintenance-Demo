@@ -775,11 +775,7 @@ def main():
         """
         <div class='cadence-wrap'>
           <div class='cadence-main'>CADENCE</div>
-<<<<<<< codex/implement-various-ui-modifications-qenvbe
           <div class='cadence-sub'>Coordinated Asset DECision Engine</div>
-=======
-          <div class='cadence-sub'>Executive Maintenance Decision Intelligence</div>
->>>>>>> main
           <div class='cadence-tag'>Professional demo for risk-aware, standards-guided maintenance orchestration</div>
         </div>
         """,
