@@ -695,6 +695,20 @@ def typewriter_render(text: str, speed_ms: int = 36):
     return buff
 
 
+def render_tab_guide(tab_key: str, text: str, speed_ms: int = 42):
+    """Render a per-tab one-time typewriter guide, then keep static summary."""
+    state_key = f"tab_guide_played_{tab_key}"
+    if state_key not in st.session_state:
+        st.session_state[state_key] = False
+
+    st.markdown("<div class='cadence-mini-title'>Quick Guide</div>", unsafe_allow_html=True)
+    if not st.session_state[state_key]:
+        typewriter_render(text, speed_ms=speed_ms)
+        st.session_state[state_key] = True
+    else:
+        st.caption(text)
+
+
 def get_secret_or_default(key: str, default: str = "") -> str:
     try:
         if key in st.secrets:
@@ -746,36 +760,59 @@ def normalize_openai_endpoint(raw_endpoint: str) -> str:
 # ------------------------------
 
 def main():
-    st.set_page_config(page_title="CADENCE – Coordinated Asset Decision Engine", page_icon="🛰️", layout="wide")
+    st.set_page_config(page_title="CADENCE – Coordinated Asset Decision Engine", page_icon="🏢", layout="wide")
 
     st.markdown(
         """
         <style>
-            .oracle-card {padding: 0.65rem 0.9rem; border-radius: 0.8rem; border: 1px solid rgba(49,51,63,0.2); background: rgba(250,250,252,0.8);}
-            .oracle-sub {color: #667085; margin-top: -0.4rem; margin-bottom: 0.6rem;}
-            .gen-note {color:#667085;font-size:0.9rem;margin-top:-0.3rem;}
-            .cadence-wrap {text-align:center; margin-bottom:0.35rem;}
-            .cadence-main {font-size:2.2rem; font-weight:800; letter-spacing:0.02em; margin-bottom:0.2rem;}
-            .cadence-sub {font-size:1.2rem; margin-bottom:0.2rem;}
-            .cadence-tag {font-size:0.98rem; color:#667085;}
+            .stApp {background: linear-gradient(180deg, #F8FAFC 0%, #EEF2F7 100%); color:#0F172A;}
+            [data-testid="stSidebar"] {background: #0F172A; border-right: 1px solid rgba(148,163,184,0.25);}
+            [data-testid="stSidebar"] * {color: #E2E8F0 !important;}
+            [data-testid="stSidebar"] .stSelectbox label,
+            [data-testid="stSidebar"] .stSlider label,
+            [data-testid="stSidebar"] .stToggle label {font-weight:600;}
+            .gen-note {color:#64748B;font-size:0.9rem;margin-top:-0.3rem;}
+            .cadence-wrap {padding:1.0rem 1.2rem; margin:0.2rem 0 0.7rem; border:1px solid #CBD5E1; border-radius:14px; background:#FFFFFF;}
+            .cadence-main {font-size:2.0rem; font-weight:800; letter-spacing:0.015em; color:#0F172A;}
+            .cadence-sub {font-size:1.05rem; color:#334155; margin-top:0.15rem;}
+            .cadence-tag {font-size:0.92rem; color:#64748B; margin-top:0.2rem;}
+            .cadence-mini-title {font-size:0.76rem; font-weight:700; letter-spacing:0.02em; color:#64748B; margin-top:0.25rem;}
+            .cadence-mini-box {font-size:0.82rem; color:#334155; min-height:2.3rem; border:1px dashed #CBD5E1; border-radius:8px; background:#F8FAFC; padding:0.4rem 0.55rem;}
+            div[data-testid="stMetric"] {background:#FFFFFF; border:1px solid #CBD5E1; border-radius:12px; padding:0.5rem 0.7rem;}
+            .stTabs [data-baseweb="tab-list"] {gap:6px;}
+            .stTabs [data-baseweb="tab"] {border-radius:10px 10px 0 0; background:#E2E8F0; padding:8px 14px;}
+            .stTabs [aria-selected="true"] {background:#1D4ED8 !important; color:white !important;}
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-    st.markdown(
-        """
-        <div class='cadence-wrap'>
-          <div class='cadence-main'>CADENCE</div>
-          <div class='cadence-sub'>Coordinated Asset Decision Engine</div>
-          <div class='cadence-tag'>- Aligning Maintenance with Operational Rhythm</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    header_l, header_r = st.columns([5.3, 2.0], vertical_alignment="center")
+    with header_l:
+        st.markdown(
+            """
+            <div class='cadence-wrap'>
+              <div class='cadence-main'>CADENCE</div>
+              <div class='cadence-sub'>Coordinated Asset DECision Engine</div>
+              <div class='cadence-tag'>Professional demo for risk-aware, standards-guided maintenance orchestration</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with header_r:
+        st.markdown("<div class='cadence-mini-title'>PAGE GUIDE</div>", unsafe_allow_html=True)
+        guide_text = "Welcome to CADENCE. This demo walks you from monitoring and notification quality, to graph-based risk understanding, standards-based reasoning, decision orchestration, and finally ERP-ready SAP proposal export."
+        if "header_guide_played" not in st.session_state:
+            st.session_state["header_guide_played"] = False
+        if not st.session_state["header_guide_played"]:
+            typewriter_render(guide_text, speed_ms=34)
+            st.session_state["header_guide_played"] = True
+        else:
+            st.caption(guide_text)
 
     with st.sidebar:
-        st.header("Controls")
+        st.header("Executive Controls")
         scenario = st.selectbox("Scenario", ["Offshore expensive", "Onshore cheaper"], help="Changes mobilization cost multipliers.")
         demo_mode = st.toggle("Demo Mode (randomize mock data)", value=True, key="demo_mode_toggle")
 
@@ -837,17 +874,6 @@ def main():
     if "fivew_finalized" not in st.session_state:
         st.session_state["fivew_finalized"] = False
 
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("Active Notification (Pipeline Input)")
-    st.sidebar.caption("Risk scoring, standards retrieval, and SAP export all use this notification text.")
-    st.sidebar.text_area(
-        "Active Notification",
-        value=st.session_state["main_notification_text"],
-        height=120,
-        disabled=True,
-        key="active_notification_preview",
-    )
-
     parsed_notification = parse_notification(st.session_state["main_notification_text"], selected_asset)
 
     defer_weeks = st.sidebar.slider("Weeks to defer (Option B)", 1, 12, 4)
@@ -855,55 +881,16 @@ def main():
     planned_window = st.sidebar.selectbox("Planned Window (Option C)", planned_windows)
 
     st.sidebar.markdown("---")
-    st.sidebar.subheader("LLM Runtime")
-    online_mode = bool(st.session_state.get("_online_mode", False))
+    llm_source = str(get_secret_or_default("LLM_SOURCE", "openai_api")).strip().lower()
+    use_openai_api = llm_source != "mock"
+    openai_model = str(get_secret_or_default("OPENAI_MODEL", "gpt-4o-mini"))
+    openai_endpoint = normalize_openai_endpoint(get_secret_or_default("OPENAI_API_ENDPOINT", "https://api.openai.com/v1/chat/completions"))
+    openai_api_key = normalize_api_key(get_first_config(
+        ["OPENAI_API_KEY", "openai_api_key", "OPEN_API_KEY", "open_api_key"],
+        "",
+    ))
 
-    if online_mode:
-        st.sidebar.caption("Online mode: use ChatGPT API (for Streamlit Cloud).")
-        llm_source = "openai_api"
-    else:
-        llm_source = st.sidebar.radio(
-            "LLM source",
-            ["mock", "openai_api"],
-            index=1,
-            key="llm_source_radio",
-            format_func=lambda x: {
-                "mock": "Mock (offline)",
-                "openai_api": "ChatGPT API (default)",
-            }[x],
-        )
-
-    use_openai_api = llm_source == "openai_api"
-
-    openai_model = "gpt-4o-mini"
-    openai_endpoint = "https://api.openai.com/v1/chat/completions"
-    openai_api_key = ""
-
-    if use_openai_api:
-        st.sidebar.caption("OpenAI API is paid. Configure key via Streamlit secrets or environment variables (do NOT commit keys).")
-        st.sidebar.success("Default provider: ChatGPT API")
-        openai_model = st.sidebar.text_input("OpenAI model", value=get_secret_or_default("OPENAI_MODEL", "gpt-4o-mini"), key="openai_model_input")
-        openai_endpoint = st.sidebar.text_input(
-            "OpenAI endpoint",
-            value=get_secret_or_default("OPENAI_API_ENDPOINT", "https://api.openai.com/v1/chat/completions"),
-            key="openai_endpoint_input",
-            help="You can paste either full endpoint or a base URL; app will normalize to /v1/chat/completions.",
-        )
-        openai_endpoint = normalize_openai_endpoint(openai_endpoint)
-        openai_api_key = normalize_api_key(get_first_config(
-            ["OPENAI_API_KEY", "openai_api_key", "OPEN_API_KEY", "open_api_key"],
-            "",
-        ))
-        st.sidebar.text_input(
-            "OpenAI API key (managed)",
-            value=("************" if openai_api_key else "Not configured"),
-            disabled=True,
-            key="openai_api_key_locked",
-        )
-        st.sidebar.caption("Accepted secret names: OPENAI_API_KEY / openai_api_key / OPEN_API_KEY / open_api_key")
-
-    st.sidebar.markdown("---")
-    stream_render = st.sidebar.toggle("Typewriter output (ChatGPT-like)", value=True, key="typewriter_output")
+    stream_render = str(get_secret_or_default("TYPEWRITER_OUTPUT", "true")).strip().lower() not in {"0", "false", "no"}
 
     options_df = evaluate_options(
         selected_asset,
@@ -953,6 +940,7 @@ def main():
 
     with tabs[0]:
         st.subheader("Overview")
+        render_tab_guide("overview", "This page gives the executive snapshot: live health, risk deltas, anomaly changes, and subsystem ranking so leaders can align attention before jumping into detailed analysis.")
         st.markdown("""
         This view follows the **3C-based risk-constrained planning storyline**: 
         **(1)** monitor asset health and context, **(2)** estimate system-aware risk, and **(3)** compare feasible intervention plans with transparent trade-offs.
@@ -970,7 +958,6 @@ def main():
         kpi[2].metric("Predicted Time-to-Threshold (days)", f"{selected_asset['predicted_time_to_threshold']:.1f}")
         kpi[3].metric("Anomaly Score", f"{latest_row['anomaly_score']:.2f}", delta=f"{anomaly_delta:+.2f}")
         kpi[4].metric("Estimated Mobilization Cost", f"${selected_asset['mobilization_cost']:,.0f}")
-        st.caption("Summary uses latest record; Delta = latest - previous. Risk formula: risk_score = (systemic_priority_normalized*0.5 + (100-current_health)/100*0.3 + anomaly_score_normalized*0.2) * 100")
 
         overview_cols = ["asset_id", "asset_name", "subsystem", "criticality", "current_health", "anomaly_score", "systemic_priority", "risk_score"]
         risk_rank = model_df[overview_cols].sort_values(["subsystem", "risk_score"], ascending=[True, False]).copy()
@@ -1022,6 +1009,7 @@ def main():
 
     with tabs[1]:
         st.subheader("Notification Assist (5W)")
+        render_tab_guide("notification", "This page standardizes raw operator notes into structured 5W statements (What, When, Where, Who, Why), improving downstream model quality, traceability, and handover clarity.")
 
         top_left, top_right = st.columns([1.3, 1])
         with top_left:
@@ -1049,12 +1037,12 @@ def main():
 
         st.markdown("#### Draft · 5W Generator")
         st.markdown("<div class='gen-note'>Generate from the Draft text below, edit (human-in-the-loop), then submit to lock.</div>", unsafe_allow_html=True)
-        draft_col, arrow_col = st.columns([16, 2], vertical_alignment="top")
+        draft_col, action_col = st.columns([16, 3], vertical_alignment="top")
         with draft_col:
             st.text_area("Draft text", height=200, key="notif_assist_editor", label_visibility="collapsed")
-        with arrow_col:
+        with action_col:
             st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
-            generate_clicked = st.button("➡", key="generate_5w_btn", use_container_width=True)
+            generate_clicked = st.button("Generate 5W", key="generate_5w_btn", use_container_width=True)
             st.button("Clear", key="clear_draft_btn", on_click=_draft_clear, use_container_width=True)
 
         if generate_clicked:
@@ -1113,6 +1101,7 @@ def main():
 
     with tabs[2]:
         st.subheader("Asset Risk Graph")
+        render_tab_guide("risk_graph", "This page visualizes dependency and propagation. Use it to understand how one asset's degradation can cascade through connected equipment and amplify operational impact.")
         
 
         layout_df = build_layout_positions(assets_df).merge(
@@ -1241,8 +1230,7 @@ def main():
 
     with tabs[3]:
         st.subheader("Health & PdM Signals")
-        
-        st.markdown(f"For **{selected_name}**, latest health is **{latest_row['health_index']:.1f}** with daily change **{health_delta:+.2f}**; estimated time to threshold: **{selected_asset['predicted_time_to_threshold']:.1f}** days.")
+        render_tab_guide("signals", "This page focuses on time-series health and anomaly behavior, including projection toward threshold crossing, so maintenance windows can be prepared before critical deterioration.")
 
         asset_ts = ts_df[ts_df["asset_id"] == selected_asset["asset_id"]].sort_values("date").reset_index(drop=True).copy()
         asset_ts = sanitize_chart_df(asset_ts, ["date", "health_index", "anomaly_score"])
@@ -1373,6 +1361,7 @@ def main():
 
     with tabs[5]:
         st.subheader("Decision Orchestration")
+        render_tab_guide("decision", "This page compares intervention options using the 3C lens—maintenance cost, production impact, and residual risk—so planners can select the most balanced strategy.")
         
         st.markdown("""
         **3.5 3C-Based Risk-Constrained Decision Layer**  
@@ -1447,12 +1436,13 @@ def main():
 
     with tabs[4]:
         st.subheader("Standards (RAG) & Explainability")
+        render_tab_guide("rag", "This page combines standards-grounded retrieval with explainable LLM reasoning to summarize likely fault hypotheses, references, and context-aware recommendations.")
 
         tr_case = model_df.loc[model_df["asset_id"] == "TR1"].iloc[0]
-        fixed_q = "What is the most likely current potential fault? (Please answer in English.)"
+        fixed_q = "For example, a power transformer health goes down. We are going to check the potential faults."
 
-        st.markdown("#### Fixed Transformer Fault Query")
-        st.text_input("Locked question", value=fixed_q, disabled=True, key="fixed_fault_question")
+        st.markdown("#### Transformer Fault Storyline")
+        st.text_input("Story prompt", value=fixed_q, disabled=True, key="fixed_fault_question")
 
         default_story = (
             f"Transformer case (TR1): current health index is {float(tr_case['current_health']):.1f}. "
@@ -1495,7 +1485,12 @@ def main():
             c_rag_l, c_rag_r = st.columns([1.3, 1])
             with c_rag_l:
                 st.markdown("#### LLM-Generated RAG Answer")
-                st.info(st.session_state.get("rag_answer_cached", default_story))
+                rag_answer_text = st.session_state.get("rag_answer_cached", default_story)
+                if stream_render:
+                    st.markdown("##### Streaming Answer")
+                    typewriter_render(rag_answer_text, speed_ms=30)
+                else:
+                    st.info(rag_answer_text)
                 st.markdown("**Reference (scenario assumption):** IEEE C57.104:2019, elevated CO2 trend")
 
             with c_rag_r:
@@ -1512,24 +1507,33 @@ def main():
         else:
             st.info("Press **Submit Query** to generate the fault-analysis answer and display the triangle chart.")
 
-        st.markdown("#### Explainability")
-        explain = (
-            f"Decision context: TR1 current health **{float(tr_case['current_health']):.1f}**, risk score **{float(tr_case['risk_score']):.1f}**. "
-            f"System recommendation from options remains **{options_df.iloc[0]['option']}** with focus on preventing thermal escalation."
-        )
-        st.info(explain)
+        if st.session_state.get("rag_generated", False):
+            st.markdown("#### Explainability")
+            explain = (
+                f"Decision context: TR1 current health **{float(tr_case['current_health']):.1f}**, risk score **{float(tr_case['risk_score']):.1f}**. "
+                f"System recommendation from options remains **{options_df.iloc[0]['option']}** with focus on preventing thermal escalation."
+            )
+            st.info(explain)
 
     with tabs[6]:
         st.subheader("SAP Proposal Export")
-        
+        render_tab_guide("sap_export", "This page packages the selected recommendation, risk context, and standards references into an ERP-ready payload for maintenance execution and planner approval workflows.")
+        st.markdown("Export the aligned maintenance proposal payload for downstream ERP integration.")
 
-        st.json(sap_payload)
-        st.download_button(
-            label="Download JSON",
-            data=json.dumps(sap_payload, indent=2),
-            file_name=f"oracle_work_order_{selected_asset['asset_id']}.json",
-            mime="application/json",
-        )
+        export_col_l, export_col_r = st.columns([1.4, 1])
+        with export_col_l:
+            st.markdown("#### JSON Payload")
+            st.json(sap_payload)
+        with export_col_r:
+            st.markdown("#### Export Action")
+            st.download_button(
+                label="Download JSON",
+                data=json.dumps(sap_payload, indent=2),
+                file_name=f"oracle_work_order_{selected_asset['asset_id']}.json",
+                mime="application/json",
+                use_container_width=True,
+            )
+            st.caption("Payload structure is synchronized with current risk, recommendation, and standards outputs.")
 
         preview = pd.DataFrame(
             {
