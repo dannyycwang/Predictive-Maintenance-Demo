@@ -776,7 +776,7 @@ def main():
             .cadence-main {font-size:2.0rem; font-weight:800; letter-spacing:0.015em; color:#0F172A;}
             .cadence-sub {font-size:1.05rem; color:#334155; margin-top:0.15rem;}
             .cadence-tag {font-size:0.92rem; color:#64748B; margin-top:0.2rem;}
-            div[data-testid="stMetric"] {background:#FFFFFF; border:1px solid #CBD5E1; border-radius:12px; padding:0.5rem 0.7rem;}
+            div[data-testid="stMetric"] {background:#FFFFFF; border:1px solid #CBD5E1; border-radius:12px; padding:0.5rem 0.7rem; min-height: 152px; display:flex; flex-direction:column; justify-content:flex-start;}
             .stTabs [data-baseweb="tab-list"] {gap:6px;}
             .stTabs [data-baseweb="tab"] {border-radius:10px 10px 0 0; background:#E2E8F0; padding:8px 14px;}
             .stTabs [aria-selected="true"] {background:#1D4ED8 !important; color:white !important;}
@@ -1000,9 +1000,9 @@ def main():
         kpi = st.columns(5)
         kpi[0].metric("Current Health Index", f"{latest_row['health_index']:.1f}", delta=f"{health_delta:+.2f}")
         kpi[1].metric("Risk Score", f"{risk_latest:.1f}", delta=f"{risk_delta:+.2f}")
-        kpi[2].metric("Predicted Time-to-Threshold (days)", f"{selected_asset['predicted_time_to_threshold']:.1f}")
+        kpi[2].metric("Predicted Time-to-Threshold (days)", f"{selected_asset['predicted_time_to_threshold']:.1f}", delta=" ")
         kpi[3].metric("Anomaly Score", f"{latest_row['anomaly_score']:.2f}", delta=f"{anomaly_delta:+.2f}")
-        kpi[4].metric("Estimated Mobilization Cost", f"${selected_asset['mobilization_cost']:,.0f}")
+        kpi[4].metric("Estimated Mobilization Cost", f"${selected_asset['mobilization_cost']:,.0f}", delta=" ")
 
         overview_cols = ["asset_id", "asset_name", "subsystem", "criticality", "current_health", "anomaly_score", "systemic_priority", "risk_score"]
         risk_rank = model_df[overview_cols].sort_values(["subsystem", "risk_score"], ascending=[True, False]).copy()
