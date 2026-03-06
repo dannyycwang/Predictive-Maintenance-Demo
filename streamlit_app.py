@@ -1371,9 +1371,19 @@ def main():
             y_pad = max(6.0, y_span * 0.35)
             y_domain = [max(0.0, y_low - y_pad), min(100.0, y_high + y_pad)]
 
-            # Keep one explicit y-channel here to avoid stale-build confusion.
-            health_line = (
-                alt.Chart(sim_ts_clean)
+            actual_df = sim_ts_clean[["date", "health_index"]].copy()
+            actual_df["line"] = "Actual Health"
+            actual_df = actual_df.rename(columns={"health_index": "health_value"})
+
+            proj_df = ext_fit_df[["date", "health_reg_ext"]].copy()
+            proj_df["line"] = "Trend Projection"
+            proj_df = proj_df.rename(columns={"health_reg_ext": "health_value"})
+
+            line_df = pd.concat([actual_df, proj_df], ignore_index=True)
+            line_df = sanitize_chart_df(line_df, ["date", "health_value", "line"])
+
+            line_chart = (
+                alt.Chart(line_df)
                 .mark_line(point=False, strokeWidth=2)
                 .encode(
                     x=alt.X(
@@ -1383,21 +1393,27 @@ def main():
                         scale=alt.Scale(domain=[start_date, max_date]),
                     ),
                     y=alt.Y(
-                        "health_index:Q",
+                        "health_value:Q",
                         title="Health Index",
                         scale=alt.Scale(domain=y_domain),
                     ),
-                    color=alt.value("#1f77b4"),
-                    tooltip=["date:T", "health_index:Q", "operating_mode:N"],
-                )
-            )
-            fit_line = (
-                alt.Chart(ext_fit_df)
-                .mark_line(strokeDash=[8, 5], strokeWidth=2, color="#2ca02c")
-                .encode(
-                    x="date:T",
-                    y=alt.Y("health_reg_ext:Q", title="Health Index"),
-                    tooltip=["date:T", alt.Tooltip("health_reg_ext:Q", title="Linear Fit Extension")],
+                    color=alt.Color(
+                        "line:N",
+                        title="Legend",
+                        scale=alt.Scale(
+                            domain=["Actual Health", "Trend Projection"],
+                            range=["#1f77b4", "#2ca02c"],
+                        ),
+                    ),
+                    strokeDash=alt.StrokeDash(
+                        "line:N",
+                        scale=alt.Scale(
+                            domain=["Actual Health", "Trend Projection"],
+                            range=[[1, 0], [8, 5]],
+                        ),
+                        legend=None,
+                    ),
+                    tooltip=["date:T", alt.Tooltip("health_value:Q", title="Health Index"), "line:N"],
                 )
             )
             threshold_line = (
@@ -1405,7 +1421,8 @@ def main():
                 .mark_rule(color="red", strokeDash=[6, 5])
                 .encode(y="y:Q")
             )
-            st.altair_chart((health_line + fit_line + threshold_line).properties(height=340).interactive(), use_container_width=True)
+            st.altair_chart((line_chart + threshold_line).properties(height=340).interactive(), use_container_width=True)
+            st.caption("Legend: Actual Health (blue solid), Trend Projection (green dashed), Threshold 40 (red dashed line).")
 
             anomaly = (
                 alt.Chart(sim_ts_clean)
