@@ -828,7 +828,7 @@ def main():
         "Notification (5W)",
         "Risk Graph",
         "Health Signals",
-        "RAG & Explainability",
+        "Compliance & Explainability",
         "Decision",
         "SAP Export",
     ]
@@ -1496,8 +1496,8 @@ def main():
         st.caption("Simulation mapping: C_maintenance (normalized maintenance cost), C_production (normalized production impact), C_risk (normalized residual-risk exposure).")
 
 
-    elif selected_tab == "RAG & Explainability":
-        st.subheader("RAG & Explainability")
+    elif selected_tab == "Compliance & Explainability":
+        st.subheader("Compliance & Explainability")
 
         tr_case = model_df.loc[model_df["asset_id"] == "TR1"].iloc[0]
         fixed_q = "What is the most likely potential fault code at present?"
@@ -1505,12 +1505,25 @@ def main():
         st.markdown("#### Transformer Fault Storyline · For example, a power transformer health goes down. We are going to check the potential faults.")
         st.text_input("Query prompt", value=fixed_q, disabled=True, key="fixed_fault_question")
 
+        st.markdown("#### False Alarm History")
+        false_alarm_df = pd.DataFrame(
+            {
+                "indicator": ["C2H2"],
+                "recorded_value": ["2 ppm"],
+                "handling_method": ["Sensor calibration"],
+            }
+        )
+        st.dataframe(false_alarm_df, use_container_width=True, hide_index=True)
+
+        compliance_note = "From historical false-alarm records, if C2H2 exceeds the threshold, check sensor calibration first."
+
         default_story = (
             f"Transformer case (TR1): current health index is {float(tr_case['current_health']):.1f}. "
             "Based on IEEE C57.104 (2019) style interpretation, CO2 concentration is elevated. "
             "Estimated fault type: T1 thermal fault (T>300°C). "
             "Recommended action: schedule inspection and maintenance immediately."
         )
+        default_story = f"{default_story} {compliance_note}"
 
         if "rag_generated" not in st.session_state:
             st.session_state["rag_generated"] = False
@@ -1521,7 +1534,7 @@ def main():
         with c_submit_l:
             submit_rag = st.button("Submit Query", key="submit_fixed_rag", use_container_width=True)
         with c_submit_r:
-            st.caption("Click submit to generate the answer and reveal the Duval triangle panel.")
+            st.caption("Click submit to generate the compliance answer and reveal the Duval triangle panel.")
 
         if submit_rag:
             rag_answer = default_story
@@ -1534,6 +1547,8 @@ def main():
                 ok_rag, rag_text, rag_err = call_openai_fault_analysis(llm_q, openai_model, openai_api_key.strip(), openai_endpoint.strip())
                 if ok_rag:
                     rag_answer = rag_text
+                    if compliance_note not in rag_answer:
+                        rag_answer = f"{rag_answer.rstrip()} {compliance_note}"
                 else:
                     st.warning(f"RAG LLM generation failed; using scenario baseline. Reason: {rag_err}")
             else:
@@ -1545,7 +1560,7 @@ def main():
         if st.session_state.get("rag_generated", False):
             c_rag_l, c_rag_r = st.columns([1.3, 1])
             with c_rag_l:
-                st.markdown("#### LLM-Generated RAG Answer")
+                st.markdown("#### LLM-Generated Compliance Answer")
                 rag_answer_text = st.session_state.get("rag_answer_cached", default_story)
                 if stream_render:
                     st.markdown("##### Streaming Answer")
