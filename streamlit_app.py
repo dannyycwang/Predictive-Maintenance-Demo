@@ -776,6 +776,9 @@ def main():
             .cadence-main {font-size:2.0rem; font-weight:800; letter-spacing:0.015em; color:#0F172A;}
             .cadence-sub {font-size:1.05rem; color:#334155; margin-top:0.15rem;}
             .cadence-tag {font-size:0.92rem; color:#64748B; margin-top:0.2rem;}
+            .cadence-legend-box {margin-top:0.35rem; border:1px solid #CBD5E1; border-radius:10px; background:#F8FAFC; padding:0.45rem 0.6rem;}
+            .cadence-legend-title {font-size:0.78rem; color:#475569; font-weight:700; margin-bottom:0.2rem;}
+            .cadence-legend-item {font-size:0.80rem; color:#334155; margin:0.08rem 0;}
             div[data-testid="stMetric"] {background:#FFFFFF; border:1px solid #CBD5E1; border-radius:12px; padding:0.5rem 0.7rem; min-height: 152px; display:flex; flex-direction:column; justify-content:flex-start;}
             .stTabs [data-baseweb="tab-list"] {gap:6px;}
             .stTabs [data-baseweb="tab"] {border-radius:10px 10px 0 0; background:#E2E8F0; padding:8px 14px;}
@@ -998,7 +1001,7 @@ def main():
         c2.markdown(f"**Facility Status:** {facility_status}")
 
         kpi = st.columns(5)
-        kpi[0].metric("Current Health Index", f"{latest_row['health_index']:.1f}", delta=f"{health_delta:+.2f}")
+        kpi[0].metric("Current Health Score", f"{latest_row['health_index']:.1f}", delta=f"{health_delta:+.2f}")
         kpi[1].metric("Risk Score", f"{risk_latest:.1f}", delta=f"{risk_delta:+.2f}")
         kpi[2].metric("Predicted Time-to-Threshold (days)", f"{selected_asset['predicted_time_to_threshold']:.1f}", delta=" ")
         kpi[3].metric("Anomaly Score", f"{latest_row['anomaly_score']:.2f}", delta=f"{anomaly_delta:+.2f}")
@@ -1165,7 +1168,7 @@ def main():
                     x=alt.X("x:Q", title="Facility Zone X"),
                     y=alt.Y("y:Q", title="Facility Zone Y"),
                     size=alt.Size("current_health:Q", scale=alt.Scale(range=[120, 950]), title="Current Health"),
-                    color=alt.Color("current_health:Q", title="Health Index", scale=alt.Scale(scheme="redyellowgreen")),
+                    color=alt.Color("current_health:Q", title="Health Score", scale=alt.Scale(scheme="redyellowgreen")),
                     shape=alt.Shape("subsystem:N", title="Subsystem"),
                     tooltip=["asset_name", "asset_id", "subsystem", alt.Tooltip("current_health:Q", title="Health")],
                 )
@@ -1300,7 +1303,7 @@ def main():
         threshold = 40
 
         st.caption("Use the slider to simulate timeline progression and observe health decline; dashed line shows linear trend.")
-        st.caption("Threshold line uses Health Index = 40.")
+        st.caption("Threshold line uses Health Score = 40.")
         min_sim = 2 if len(asset_ts) >= 2 else 1
         default_sim = len(asset_ts) if len(asset_ts) > 0 else 1
         sim_day = st.slider("Simulation Day (time progression)", min_value=min_sim, max_value=default_sim, value=default_sim, step=1)
@@ -1353,10 +1356,10 @@ def main():
             health_90_row = future_df.loc[future_df.index == 89, "health_reg_ext"] if len(future_df) >= 90 else pd.Series(dtype=float)
             health_90 = float(health_90_row.iloc[0]) if not health_90_row.empty else (float(future_df["health_reg_ext"].iloc[-1]) if not future_df.empty else float(hist_fit_df["health_reg_ext"].iloc[-1]))
             if crossing_date is not None:
-                st.caption(f"Projected to cross Health Index 40 around {crossing_date.strftime('%Y-%m')}.")
+                st.caption(f"Projected to cross Health Score 40 around {crossing_date.strftime('%Y-%m')}.")
             else:
                 st.caption("Projected threshold crossing is beyond current 3-month horizon.")
-            st.markdown(f"**3-month projection:** Health Index ≈ **{health_90:.1f}**. {'Immediate repair is recommended.' if health_90 <= 40 else 'Prepare and schedule maintenance soon.'}")
+            st.markdown(f"**3-month projection:** Health Score ≈ **{health_90:.1f}**. {'Immediate repair is recommended.' if health_90 <= 40 else 'Prepare and schedule maintenance soon.'}")
 
             max_date = ext_fit_df["date"].max()
 
@@ -1394,7 +1397,7 @@ def main():
                     ),
                     y=alt.Y(
                         "health_value:Q",
-                        title="Health Index",
+                        title="Health Score",
                         scale=alt.Scale(domain=y_domain),
                     ),
                     color=alt.Color(
@@ -1413,7 +1416,7 @@ def main():
                         ),
                         legend=None,
                     ),
-                    tooltip=["date:T", alt.Tooltip("health_value:Q", title="Health Index"), "line:N"],
+                    tooltip=["date:T", alt.Tooltip("health_value:Q", title="Health Score"), "line:N"],
                 )
             )
             threshold_line = (
@@ -1421,8 +1424,20 @@ def main():
                 .mark_rule(color="red", strokeDash=[6, 5])
                 .encode(y="y:Q")
             )
-            st.altair_chart((line_chart + threshold_line).properties(height=340).interactive(), use_container_width=True)
-            st.caption("Legend: Actual Health (blue solid), Trend Projection (green dashed), Threshold 40 (red dashed line).")
+            chart_col, legend_col = st.columns([4.8, 1.35], vertical_alignment="top")
+            chart_col.altair_chart((line_chart + threshold_line).properties(height=340).interactive(), use_container_width=True)
+            with legend_col:
+                st.markdown(
+                    """
+                    <div class='cadence-legend-box'>
+                      <div class='cadence-legend-title'>Legend</div>
+                      <div class='cadence-legend-item'>🔵 Actual Health Score (solid line)</div>
+                      <div class='cadence-legend-item'>🟢 Trend Projection (dashed line)</div>
+                      <div class='cadence-legend-item'>🔴 Threshold 40 (dashed rule)</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
             anomaly = (
                 alt.Chart(sim_ts_clean)
@@ -1535,7 +1550,7 @@ def main():
         compliance_note = "From historical false-alarm records, if C2H2 exceeds the threshold, check sensor calibration first."
 
         default_story = (
-            f"Transformer case (TR1): current health index is {float(tr_case['current_health']):.1f}. "
+            f"Transformer case (TR1): current health score is {float(tr_case['current_health']):.1f}. "
             "Based on IEEE C57.104 (2019) style interpretation, CO2 concentration is elevated. "
             "Estimated fault type: T1 thermal fault (T>300°C). "
             "Recommended action: schedule inspection and maintenance immediately."
@@ -1557,7 +1572,7 @@ def main():
             rag_answer = default_story
             if use_openai_api and openai_api_key.strip():
                 llm_q = (
-                    f"{fixed_q} Use transformer TR1 with health index {float(tr_case['current_health']):.1f}. "
+                    f"{fixed_q} Use transformer TR1 with health score {float(tr_case['current_health']):.1f}. "
                     "Assume IEEE C57.104:2019 evidence indicates elevated CO2 and infer fault T1 thermal fault (T>300°C). "
                     "Provide a concise executive answer with recommended action."
                 )
