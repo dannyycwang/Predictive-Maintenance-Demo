@@ -1383,18 +1383,20 @@ def main():
                 .mark_rule(color="red", strokeDash=[6, 5])
                 .encode(y="y:Q")
             )
-            st.altair_chart((line_chart + threshold_line).properties(height=340).interactive(), use_container_width=True)
-            st.markdown(
-                """
-                <div class='cadence-legend-box'>
-                  <div class='cadence-legend-title'>Legend</div>
-                  <div class='cadence-legend-item'>🔵 Actual Health Score (solid line)</div>
-                  <div class='cadence-legend-item'>🟢 Trend Projection (dashed line)</div>
-                  <div class='cadence-legend-item'>🔴 Threshold 40 (dashed rule)</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+            chart_col, legend_col = st.columns([4.8, 1.35], vertical_alignment="top")
+            chart_col.altair_chart((line_chart + threshold_line).properties(height=340).interactive(), use_container_width=True)
+            with legend_col:
+                st.markdown(
+                    """
+                    <div class='cadence-legend-box'>
+                      <div class='cadence-legend-title'>Legend</div>
+                      <div class='cadence-legend-item'>🔵 Actual Health Score (solid line)</div>
+                      <div class='cadence-legend-item'>🟢 Trend Projection (dashed line)</div>
+                      <div class='cadence-legend-item'>🔴 Threshold 40 (dashed rule)</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
             anomaly = (
                 alt.Chart(sim_ts_clean)
