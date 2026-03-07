@@ -746,36 +746,91 @@ def normalize_openai_endpoint(raw_endpoint: str) -> str:
 # ------------------------------
 
 def main():
-    st.set_page_config(page_title="CADENCE – Coordinated Asset Decision Engine", page_icon="🛰️", layout="wide")
+    st.set_page_config(page_title="CADENCE – Coordinated Asset Decision Engine", page_icon="🏢", layout="wide")
 
     st.markdown(
         """
         <style>
-            .oracle-card {padding: 0.65rem 0.9rem; border-radius: 0.8rem; border: 1px solid rgba(49,51,63,0.2); background: rgba(250,250,252,0.8);}
-            .oracle-sub {color: #667085; margin-top: -0.4rem; margin-bottom: 0.6rem;}
-            .gen-note {color:#667085;font-size:0.9rem;margin-top:-0.3rem;}
-            .cadence-wrap {text-align:center; margin-bottom:0.35rem;}
-            .cadence-main {font-size:2.2rem; font-weight:800; letter-spacing:0.02em; margin-bottom:0.2rem;}
-            .cadence-sub {font-size:1.2rem; margin-bottom:0.2rem;}
-            .cadence-tag {font-size:0.98rem; color:#667085;}
+            .stApp {background: linear-gradient(180deg, #F8FAFC 0%, #EEF2F7 100%); color:#0F172A;}
+            [data-testid="stSidebar"] {background: #0F172A; border-right: 1px solid rgba(148,163,184,0.25);}
+            [data-testid="stSidebar"] * {color: #E2E8F0 !important;}
+            [data-testid="stSidebar"] .stSelectbox label,
+            [data-testid="stSidebar"] .stSlider label,
+            [data-testid="stSidebar"] .stToggle label {font-weight:600;}
+            .gen-note {color:#64748B;font-size:0.9rem;margin-top:-0.3rem;}
+            .cadence-wrap {padding:1.0rem 1.2rem; margin:0.2rem 0 0.7rem; border:1px solid #CBD5E1; border-radius:14px; background:#FFFFFF;}
+            .cadence-main {font-size:2.0rem; font-weight:800; letter-spacing:0.015em; color:#0F172A;}
+            .cadence-sub {font-size:1.05rem; color:#334155; margin-top:0.15rem;}
+            .cadence-tag {font-size:0.92rem; color:#64748B; margin-top:0.2rem;}
+            .cadence-legend-box {margin-top:0.35rem; border:1px solid #CBD5E1; border-radius:10px; background:#F8FAFC; padding:0.45rem 0.6rem;}
+            .cadence-legend-title {font-size:0.78rem; color:#475569; font-weight:700; margin-bottom:0.2rem;}
+            .cadence-legend-item {font-size:0.80rem; color:#334155; margin:0.08rem 0;}
+            div[data-testid="stMetric"] {background:#FFFFFF; border:1px solid #CBD5E1; border-radius:12px; padding:0.5rem 0.7rem; min-height: 152px; display:flex; flex-direction:column; justify-content:flex-start;}
+            .stTabs [data-baseweb="tab-list"] {gap:6px;}
+            .stTabs [data-baseweb="tab"] {border-radius:10px 10px 0 0; background:#E2E8F0; padding:8px 14px;}
+            .stTabs [aria-selected="true"] {background:#1D4ED8 !important; color:white !important;}
+
+            /* Make horizontal radio navigation look like tabs */
+            div[role="radiogroup"] {
+                gap: 0.35rem;
+                border-bottom: 1px solid #CBD5E1;
+                padding-bottom: 0.08rem;
+                margin-bottom: 0.55rem;
+            }
+            div[role="radiogroup"] > label {
+                margin: 0 !important;
+                padding: 0 !important;
+                background: transparent !important;
+            }
+            div[role="radiogroup"] > label > div:first-child {
+                display: none;
+            }
+            div[role="radiogroup"] > label > div:last-child {
+                background: #E2E8F0;
+                border: 1px solid #CBD5E1;
+                border-bottom: none;
+                border-radius: 10px 10px 0 0;
+                padding: 0.42rem 0.62rem;
+                transition: all 0.16s ease;
+            }
+            div[role="radiogroup"] > label p {
+                margin: 0 !important;
+                font-weight: 600;
+                font-size: 0.82rem;
+                color: #475569;
+            }
+            div[role="radiogroup"] > label:has(input:checked) > div:last-child {
+                background: #1D4ED8;
+                border-color: #1D4ED8;
+                box-shadow: 0 2px 8px rgba(29,78,216,0.18);
+            }
+            div[role="radiogroup"] > label:has(input:checked) p {
+                color: #FFFFFF;
+            }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-    st.markdown(
-        """
-        <div class='cadence-wrap'>
-          <div class='cadence-main'>CADENCE</div>
-          <div class='cadence-sub'>Coordinated Asset Decision Engine</div>
-          <div class='cadence-tag'>- Aligning Maintenance with Operational Rhythm</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    tab_labels = [
+        "Overview",
+        "Notification (5W)",
+        "Risk Graph",
+        "Health Signals",
+        "Compliance & Explainability",
+        "Decision",
+        "SAP Export",
+    ]
+    selected_tab = st.radio(
+        "Navigation",
+        tab_labels,
+        horizontal=True,
+        label_visibility="collapsed",
+        key="main_tab_nav",
     )
 
     with st.sidebar:
-        st.header("Controls")
+        st.header("Executive Controls")
         scenario = st.selectbox("Scenario", ["Offshore expensive", "Onshore cheaper"], help="Changes mobilization cost multipliers.")
         demo_mode = st.toggle("Demo Mode (randomize mock data)", value=True, key="demo_mode_toggle")
 
@@ -837,17 +892,6 @@ def main():
     if "fivew_finalized" not in st.session_state:
         st.session_state["fivew_finalized"] = False
 
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("Active Notification (Pipeline Input)")
-    st.sidebar.caption("Risk scoring, standards retrieval, and SAP export all use this notification text.")
-    st.sidebar.text_area(
-        "Active Notification",
-        value=st.session_state["main_notification_text"],
-        height=120,
-        disabled=True,
-        key="active_notification_preview",
-    )
-
     parsed_notification = parse_notification(st.session_state["main_notification_text"], selected_asset)
 
     defer_weeks = st.sidebar.slider("Weeks to defer (Option B)", 1, 12, 4)
@@ -855,55 +899,16 @@ def main():
     planned_window = st.sidebar.selectbox("Planned Window (Option C)", planned_windows)
 
     st.sidebar.markdown("---")
-    st.sidebar.subheader("LLM Runtime")
-    online_mode = bool(st.session_state.get("_online_mode", False))
+    llm_source = str(get_secret_or_default("LLM_SOURCE", "openai_api")).strip().lower()
+    use_openai_api = llm_source != "mock"
+    openai_model = str(get_secret_or_default("OPENAI_MODEL", "gpt-4o-mini"))
+    openai_endpoint = normalize_openai_endpoint(get_secret_or_default("OPENAI_API_ENDPOINT", "https://api.openai.com/v1/chat/completions"))
+    openai_api_key = normalize_api_key(get_first_config(
+        ["OPENAI_API_KEY", "openai_api_key", "OPEN_API_KEY", "open_api_key"],
+        "",
+    ))
 
-    if online_mode:
-        st.sidebar.caption("Online mode: use ChatGPT API (for Streamlit Cloud).")
-        llm_source = "openai_api"
-    else:
-        llm_source = st.sidebar.radio(
-            "LLM source",
-            ["mock", "openai_api"],
-            index=1,
-            key="llm_source_radio",
-            format_func=lambda x: {
-                "mock": "Mock (offline)",
-                "openai_api": "ChatGPT API (default)",
-            }[x],
-        )
-
-    use_openai_api = llm_source == "openai_api"
-
-    openai_model = "gpt-4o-mini"
-    openai_endpoint = "https://api.openai.com/v1/chat/completions"
-    openai_api_key = ""
-
-    if use_openai_api:
-        st.sidebar.caption("OpenAI API is paid. Configure key via Streamlit secrets or environment variables (do NOT commit keys).")
-        st.sidebar.success("Default provider: ChatGPT API")
-        openai_model = st.sidebar.text_input("OpenAI model", value=get_secret_or_default("OPENAI_MODEL", "gpt-4o-mini"), key="openai_model_input")
-        openai_endpoint = st.sidebar.text_input(
-            "OpenAI endpoint",
-            value=get_secret_or_default("OPENAI_API_ENDPOINT", "https://api.openai.com/v1/chat/completions"),
-            key="openai_endpoint_input",
-            help="You can paste either full endpoint or a base URL; app will normalize to /v1/chat/completions.",
-        )
-        openai_endpoint = normalize_openai_endpoint(openai_endpoint)
-        openai_api_key = normalize_api_key(get_first_config(
-            ["OPENAI_API_KEY", "openai_api_key", "OPEN_API_KEY", "open_api_key"],
-            "",
-        ))
-        st.sidebar.text_input(
-            "OpenAI API key (managed)",
-            value=("************" if openai_api_key else "Not configured"),
-            disabled=True,
-            key="openai_api_key_locked",
-        )
-        st.sidebar.caption("Accepted secret names: OPENAI_API_KEY / openai_api_key / OPEN_API_KEY / open_api_key")
-
-    st.sidebar.markdown("---")
-    stream_render = st.sidebar.toggle("Typewriter output (ChatGPT-like)", value=True, key="typewriter_output")
+    stream_render = str(get_secret_or_default("TYPEWRITER_OUTPUT", "true")).strip().lower() not in {"0", "false", "no"}
 
     options_df = evaluate_options(
         selected_asset,
@@ -941,17 +946,7 @@ def main():
     )
     risk_delta = float(risk_latest - risk_prev)
 
-    tabs = st.tabs([
-        "Overview",
-        "Notification Assist (5W)",
-        "Asset Risk Graph",
-        "Health & PdM Signals",
-        "Standards (RAG) & Explainability",
-        "Decision Orchestration",
-        "SAP Proposal Export",
-    ])
-
-    with tabs[0]:
+    if selected_tab == "Overview":
         st.subheader("Overview")
         st.markdown("""
         This view follows the **3C-based risk-constrained planning storyline**: 
@@ -965,12 +960,11 @@ def main():
         c2.markdown(f"**Facility Status:** {facility_status}")
 
         kpi = st.columns(5)
-        kpi[0].metric("Current Health Index", f"{latest_row['health_index']:.1f}", delta=f"{health_delta:+.2f}")
+        kpi[0].metric("Current Health Score", f"{latest_row['health_index']:.1f}", delta=f"{health_delta:+.2f}")
         kpi[1].metric("Risk Score", f"{risk_latest:.1f}", delta=f"{risk_delta:+.2f}")
-        kpi[2].metric("Predicted Time-to-Threshold (days)", f"{selected_asset['predicted_time_to_threshold']:.1f}")
+        kpi[2].metric("Latest Maintenance Deadline (days)", f"{selected_asset['predicted_time_to_threshold']:.1f}", delta=" ")
         kpi[3].metric("Anomaly Score", f"{latest_row['anomaly_score']:.2f}", delta=f"{anomaly_delta:+.2f}")
-        kpi[4].metric("Estimated Mobilization Cost", f"${selected_asset['mobilization_cost']:,.0f}")
-        st.caption("Summary uses latest record; Delta = latest - previous. Risk formula: risk_score = (systemic_priority_normalized*0.5 + (100-current_health)/100*0.3 + anomaly_score_normalized*0.2) * 100")
+        kpi[4].metric("Estimated Mobilization Cost", f"${selected_asset['mobilization_cost']:,.0f}", delta=" ")
 
         overview_cols = ["asset_id", "asset_name", "subsystem", "criticality", "current_health", "anomaly_score", "systemic_priority", "risk_score"]
         risk_rank = model_df[overview_cols].sort_values(["subsystem", "risk_score"], ascending=[True, False]).copy()
@@ -1020,8 +1014,8 @@ def main():
                 hide_index=True,
             )
 
-    with tabs[1]:
-        st.subheader("Notification Assist (5W)")
+    elif selected_tab == "Notification (5W)":
+        st.subheader("Notification (5W)")
 
         top_left, top_right = st.columns([1.3, 1])
         with top_left:
@@ -1049,12 +1043,12 @@ def main():
 
         st.markdown("#### Draft · 5W Generator")
         st.markdown("<div class='gen-note'>Generate from the Draft text below, edit (human-in-the-loop), then submit to lock.</div>", unsafe_allow_html=True)
-        draft_col, arrow_col = st.columns([16, 2], vertical_alignment="top")
+        draft_col, action_col = st.columns([16, 3], vertical_alignment="top")
         with draft_col:
             st.text_area("Draft text", height=200, key="notif_assist_editor", label_visibility="collapsed")
-        with arrow_col:
+        with action_col:
             st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
-            generate_clicked = st.button("➡", key="generate_5w_btn", use_container_width=True)
+            generate_clicked = st.button("Generate 5W", key="generate_5w_btn", use_container_width=True)
             st.button("Clear", key="clear_draft_btn", on_click=_draft_clear, use_container_width=True)
 
         if generate_clicked:
@@ -1111,8 +1105,8 @@ def main():
                 st.session_state["fivew_finalized"] = True
                 st.success("5W submitted and locked.")
 
-    with tabs[2]:
-        st.subheader("Asset Risk Graph")
+    elif selected_tab == "Risk Graph":
+        st.subheader("Risk Graph")
         
 
         layout_df = build_layout_positions(assets_df).merge(
@@ -1133,7 +1127,7 @@ def main():
                     x=alt.X("x:Q", title="Facility Zone X"),
                     y=alt.Y("y:Q", title="Facility Zone Y"),
                     size=alt.Size("current_health:Q", scale=alt.Scale(range=[120, 950]), title="Current Health"),
-                    color=alt.Color("current_health:Q", title="Health Index", scale=alt.Scale(scheme="redyellowgreen")),
+                    color=alt.Color("current_health:Q", title="Health Score", scale=alt.Scale(scheme="redyellowgreen")),
                     shape=alt.Shape("subsystem:N", title="Subsystem"),
                     tooltip=["asset_name", "asset_id", "subsystem", alt.Tooltip("current_health:Q", title="Health")],
                 )
@@ -1171,18 +1165,39 @@ def main():
             step=0.1,
             key="impact_health_slider",
         )
-        health_ratio = 0.0 if current_h <= 0 else float(np.clip(sim_health / current_h, 0, 1.5))
+        # Map lower health -> higher propagation stress (and vice versa).
+        base_stress = max(100.0 - current_h, 1e-6)
+        sim_stress = max(100.0 - float(sim_health), 0.0)
+        health_ratio = float(np.clip(sim_stress / base_stress, 0.0, 2.0))
 
-        impacted_sim = int(round(base_impacted_count * health_ratio))
-        impacted_sim = max(0, min(base_impacted_count, impacted_sim))
+        # Count impacted downstream assets using a relative-strength cutoff so
+        # improved health can reduce impacted count while deterioration keeps/expands influence.
+        downstream_strengths = [
+            float(v)
+            for aid, v in impact_base.items()
+            if aid != sim_asset["asset_id"] and float(v) > 0
+        ]
+        if downstream_strengths:
+            cutoff = min(downstream_strengths) * 0.95
+            impacted_sim = int(sum((s * health_ratio) >= cutoff for s in downstream_strengths))
+        else:
+            impacted_sim = 0
 
         c_imp1, c_imp2, c_imp3 = st.columns(3)
         c_imp1.metric("Base impacted assets", f"{base_impacted_count}")
         c_imp2.metric("Simulated impacted assets", f"{impacted_sim}", delta=f"{impacted_sim - base_impacted_count:+d}")
         c_imp3.metric("Simulated health", f"{sim_health:.1f}", delta=f"{sim_health - current_h:+.1f}")
 
+        if sim_health < current_h:
+            health_trend_txt = "drops"
+        elif sim_health > current_h:
+            health_trend_txt = "rises"
+        else:
+            health_trend_txt = "stays"
+
         st.markdown(
-            f"Asset **{sim_asset_name}** current health is **{current_h:.1f}**. When health drops to **{sim_health:.1f}**, estimated impacted downstream assets change from **{base_impacted_count}** to **{impacted_sim}**."
+            f"Asset **{sim_asset_name}** current health is **{current_h:.1f}**. "
+            f"When health {health_trend_txt} to **{sim_health:.1f}**, estimated impacted downstream assets change from **{base_impacted_count}** to **{impacted_sim}**."
         )
 
         impact_table = layout_df[["asset_id", "asset_name", "subsystem"]].copy()
@@ -1239,17 +1254,15 @@ def main():
             st.markdown("**Adjacency List (with propagation weights)**")
             st.code("\n".join(adjacency_lines), language="text")
 
-    with tabs[3]:
-        st.subheader("Health & PdM Signals")
-        
-        st.markdown(f"For **{selected_name}**, latest health is **{latest_row['health_index']:.1f}** with daily change **{health_delta:+.2f}**; estimated time to threshold: **{selected_asset['predicted_time_to_threshold']:.1f}** days.")
+    elif selected_tab == "Health Signals":
+        st.subheader("Health Signals")
 
         asset_ts = ts_df[ts_df["asset_id"] == selected_asset["asset_id"]].sort_values("date").reset_index(drop=True).copy()
         asset_ts = sanitize_chart_df(asset_ts, ["date", "health_index", "anomaly_score"])
         threshold = 40
 
         st.caption("Use the slider to simulate timeline progression and observe health decline; dashed line shows linear trend.")
-        st.caption("Threshold line uses Health Index = 40.")
+        st.caption("Threshold line uses Health Score = 40.")
         min_sim = 2 if len(asset_ts) >= 2 else 1
         default_sim = len(asset_ts) if len(asset_ts) > 0 else 1
         sim_day = st.slider("Simulation Day (time progression)", min_value=min_sim, max_value=default_sim, value=default_sim, step=1)
@@ -1302,10 +1315,10 @@ def main():
             health_90_row = future_df.loc[future_df.index == 89, "health_reg_ext"] if len(future_df) >= 90 else pd.Series(dtype=float)
             health_90 = float(health_90_row.iloc[0]) if not health_90_row.empty else (float(future_df["health_reg_ext"].iloc[-1]) if not future_df.empty else float(hist_fit_df["health_reg_ext"].iloc[-1]))
             if crossing_date is not None:
-                st.caption(f"Projected to cross Health Index 40 around {crossing_date.strftime('%Y-%m')}.")
+                st.caption(f"Projected to cross Health Score 40 around {crossing_date.strftime('%Y-%m')}.")
             else:
                 st.caption("Projected threshold crossing is beyond current 3-month horizon.")
-            st.markdown(f"**3-month projection:** Health Index ≈ **{health_90:.1f}**. {'Immediate repair is recommended.' if health_90 <= 40 else 'Prepare and schedule maintenance soon.'}")
+            st.markdown(f"**3-month projection:** Health Score ≈ **{health_90:.1f}**. {'Immediate repair is recommended.' if health_90 <= 40 else 'Prepare and schedule maintenance soon.'}")
 
             max_date = ext_fit_df["date"].max()
 
@@ -1320,9 +1333,19 @@ def main():
             y_pad = max(6.0, y_span * 0.35)
             y_domain = [max(0.0, y_low - y_pad), min(100.0, y_high + y_pad)]
 
-            # Keep one explicit y-channel here to avoid stale-build confusion.
-            health_line = (
-                alt.Chart(sim_ts_clean)
+            actual_df = sim_ts_clean[["date", "health_index"]].copy()
+            actual_df["line"] = "Actual Health"
+            actual_df = actual_df.rename(columns={"health_index": "health_value"})
+
+            proj_df = ext_fit_df[["date", "health_reg_ext"]].copy()
+            proj_df["line"] = "Trend Projection"
+            proj_df = proj_df.rename(columns={"health_reg_ext": "health_value"})
+
+            line_df = pd.concat([actual_df, proj_df], ignore_index=True)
+            line_df = sanitize_chart_df(line_df, ["date", "health_value", "line"])
+
+            line_chart = (
+                alt.Chart(line_df)
                 .mark_line(point=False, strokeWidth=2)
                 .encode(
                     x=alt.X(
@@ -1332,21 +1355,27 @@ def main():
                         scale=alt.Scale(domain=[start_date, max_date]),
                     ),
                     y=alt.Y(
-                        "health_index:Q",
-                        title="Health Index",
+                        "health_value:Q",
+                        title="Health Score",
                         scale=alt.Scale(domain=y_domain),
                     ),
-                    color=alt.value("#1f77b4"),
-                    tooltip=["date:T", "health_index:Q", "operating_mode:N"],
-                )
-            )
-            fit_line = (
-                alt.Chart(ext_fit_df)
-                .mark_line(strokeDash=[8, 5], strokeWidth=2, color="#2ca02c")
-                .encode(
-                    x="date:T",
-                    y=alt.Y("health_reg_ext:Q", title="Health Index"),
-                    tooltip=["date:T", alt.Tooltip("health_reg_ext:Q", title="Linear Fit Extension")],
+                    color=alt.Color(
+                        "line:N",
+                        title="Legend",
+                        scale=alt.Scale(
+                            domain=["Actual Health", "Trend Projection"],
+                            range=["#1f77b4", "#2ca02c"],
+                        ),
+                    ),
+                    strokeDash=alt.StrokeDash(
+                        "line:N",
+                        scale=alt.Scale(
+                            domain=["Actual Health", "Trend Projection"],
+                            range=[[1, 0], [8, 5]],
+                        ),
+                        legend=None,
+                    ),
+                    tooltip=["date:T", alt.Tooltip("health_value:Q", title="Health Score"), "line:N"],
                 )
             )
             threshold_line = (
@@ -1354,7 +1383,20 @@ def main():
                 .mark_rule(color="red", strokeDash=[6, 5])
                 .encode(y="y:Q")
             )
-            st.altair_chart((health_line + fit_line + threshold_line).properties(height=340).interactive(), use_container_width=True)
+            chart_col, legend_col = st.columns([4.8, 1.35], vertical_alignment="top")
+            chart_col.altair_chart((line_chart + threshold_line).properties(height=340).interactive(), use_container_width=True)
+            with legend_col:
+                st.markdown(
+                    """
+                    <div class='cadence-legend-box'>
+                      <div class='cadence-legend-title'>Legend</div>
+                      <div class='cadence-legend-item'>🔵 Actual Health Score (solid line)</div>
+                      <div class='cadence-legend-item'>🟢 Trend Projection (dashed line)</div>
+                      <div class='cadence-legend-item'>🔴 Threshold 40 (dashed rule)</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
             anomaly = (
                 alt.Chart(sim_ts_clean)
@@ -1371,8 +1413,8 @@ def main():
                 hide_index=True,
             )
 
-    with tabs[5]:
-        st.subheader("Decision Orchestration")
+    elif selected_tab == "Decision":
+        st.subheader("Decision")
         
         st.markdown("""
         **3.5 3C-Based Risk-Constrained Decision Layer**  
@@ -1445,21 +1487,34 @@ def main():
         st.caption("Simulation mapping: C_maintenance (normalized maintenance cost), C_production (normalized production impact), C_risk (normalized residual-risk exposure).")
 
 
-    with tabs[4]:
-        st.subheader("Standards (RAG) & Explainability")
+    elif selected_tab == "Compliance & Explainability":
+        st.subheader("Compliance & Explainability")
 
         tr_case = model_df.loc[model_df["asset_id"] == "TR1"].iloc[0]
-        fixed_q = "What is the most likely current potential fault? (Please answer in English.)"
+        fixed_q = "What is the most likely potential fault code at present?"
 
-        st.markdown("#### Fixed Transformer Fault Query")
-        st.text_input("Locked question", value=fixed_q, disabled=True, key="fixed_fault_question")
+        st.markdown("#### Transformer Fault Storyline · For example, a power transformer health goes down. We are going to check the potential faults.")
+        st.text_input("Query prompt", value=fixed_q, disabled=True, key="fixed_fault_question")
+
+        st.markdown("#### False Alarm History")
+        false_alarm_df = pd.DataFrame(
+            {
+                "indicator": ["C2H2"],
+                "recorded_value": ["2 ppm"],
+                "handling_method": ["Sensor calibration"],
+            }
+        )
+        st.dataframe(false_alarm_df, use_container_width=True, hide_index=True)
+
+        compliance_note = "From historical false-alarm records, if C2H2 exceeds the threshold, check sensor calibration first."
 
         default_story = (
-            f"Transformer case (TR1): current health index is {float(tr_case['current_health']):.1f}. "
+            f"Transformer case (TR1): current health score is {float(tr_case['current_health']):.1f}. "
             "Based on IEEE C57.104 (2019) style interpretation, CO2 concentration is elevated. "
             "Estimated fault type: T1 thermal fault (T>300°C). "
             "Recommended action: schedule inspection and maintenance immediately."
         )
+        default_story = f"{default_story} {compliance_note}"
 
         if "rag_generated" not in st.session_state:
             st.session_state["rag_generated"] = False
@@ -1470,19 +1525,21 @@ def main():
         with c_submit_l:
             submit_rag = st.button("Submit Query", key="submit_fixed_rag", use_container_width=True)
         with c_submit_r:
-            st.caption("Click submit to generate the answer and reveal the Duval triangle panel.")
+            st.caption("Click submit to generate the compliance answer and reveal the Duval triangle panel.")
 
         if submit_rag:
             rag_answer = default_story
             if use_openai_api and openai_api_key.strip():
                 llm_q = (
-                    f"{fixed_q} Use transformer TR1 with health index {float(tr_case['current_health']):.1f}. "
+                    f"{fixed_q} Use transformer TR1 with health score {float(tr_case['current_health']):.1f}. "
                     "Assume IEEE C57.104:2019 evidence indicates elevated CO2 and infer fault T1 thermal fault (T>300°C). "
                     "Provide a concise executive answer with recommended action."
                 )
                 ok_rag, rag_text, rag_err = call_openai_fault_analysis(llm_q, openai_model, openai_api_key.strip(), openai_endpoint.strip())
                 if ok_rag:
                     rag_answer = rag_text
+                    if compliance_note not in rag_answer:
+                        rag_answer = f"{rag_answer.rstrip()} {compliance_note}"
                 else:
                     st.warning(f"RAG LLM generation failed; using scenario baseline. Reason: {rag_err}")
             else:
@@ -1494,8 +1551,13 @@ def main():
         if st.session_state.get("rag_generated", False):
             c_rag_l, c_rag_r = st.columns([1.3, 1])
             with c_rag_l:
-                st.markdown("#### LLM-Generated RAG Answer")
-                st.info(st.session_state.get("rag_answer_cached", default_story))
+                st.markdown("#### LLM-Generated Compliance Answer")
+                rag_answer_text = st.session_state.get("rag_answer_cached", default_story)
+                if stream_render:
+                    st.markdown("##### Streaming Answer")
+                    typewriter_render(rag_answer_text, speed_ms=30)
+                else:
+                    st.info(rag_answer_text)
                 st.markdown("**Reference (scenario assumption):** IEEE C57.104:2019, elevated CO2 trend")
 
             with c_rag_r:
@@ -1512,24 +1574,32 @@ def main():
         else:
             st.info("Press **Submit Query** to generate the fault-analysis answer and display the triangle chart.")
 
-        st.markdown("#### Explainability")
-        explain = (
-            f"Decision context: TR1 current health **{float(tr_case['current_health']):.1f}**, risk score **{float(tr_case['risk_score']):.1f}**. "
-            f"System recommendation from options remains **{options_df.iloc[0]['option']}** with focus on preventing thermal escalation."
-        )
-        st.info(explain)
+        if st.session_state.get("rag_generated", False):
+            st.markdown("#### Explainability")
+            explain = (
+                f"Decision context: TR1 current health **{float(tr_case['current_health']):.1f}**, risk score **{float(tr_case['risk_score']):.1f}**. "
+                f"System recommendation from options remains **{options_df.iloc[0]['option']}** with focus on preventing thermal escalation."
+            )
+            st.info(explain)
 
-    with tabs[6]:
-        st.subheader("SAP Proposal Export")
-        
+    elif selected_tab == "SAP Export":
+        st.subheader("SAP Export")
+        st.markdown("Export the aligned maintenance proposal payload for downstream ERP integration.")
 
-        st.json(sap_payload)
-        st.download_button(
-            label="Download JSON",
-            data=json.dumps(sap_payload, indent=2),
-            file_name=f"oracle_work_order_{selected_asset['asset_id']}.json",
-            mime="application/json",
-        )
+        export_col_l, export_col_r = st.columns([1.4, 1])
+        with export_col_l:
+            st.markdown("#### JSON Payload")
+            st.json(sap_payload)
+        with export_col_r:
+            st.markdown("#### Export Action")
+            st.download_button(
+                label="Download JSON",
+                data=json.dumps(sap_payload, indent=2),
+                file_name=f"oracle_work_order_{selected_asset['asset_id']}.json",
+                mime="application/json",
+                use_container_width=True,
+            )
+            st.caption("Payload structure is synchronized with current risk, recommendation, and standards outputs.")
 
         preview = pd.DataFrame(
             {
