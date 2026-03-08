@@ -1139,7 +1139,7 @@ def main():
             st.session_state["fivew_review"] = review
 
             if stream_render and not locked:
-                st.markdown("##### Streaming Preview")
+                #st.markdown("##### Streaming Preview")
                 typewriter_render(review.get("standardized_5w", ""), speed_ms=28)
 
             if st.button("Submit and Lock", key="finalize_5w_btn", use_container_width=True, disabled=locked):
@@ -1595,7 +1595,7 @@ def main():
                 st.markdown("#### LLM-Generated Compliance Answer")
                 rag_answer_text = st.session_state.get("rag_answer_cached", default_story)
                 if stream_render:
-                    st.markdown("##### Streaming Answer")
+                    #st.markdown("##### Streaming Answer")
                     typewriter_render(rag_answer_text, speed_ms=30)
                 else:
                     st.info(rag_answer_text)
