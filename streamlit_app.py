@@ -1003,7 +1003,7 @@ def main():
         kpi = st.columns(5)
         kpi[0].metric("Current Health Score", f"{latest_row['health_index']:.1f}", delta=f"{health_delta:+.2f}")
         kpi[1].metric("Risk Score", f"{risk_latest:.1f}", delta=f"{risk_delta:+.2f}")
-        kpi[2].metric("Predicted Time-to-Threshold (days)", f"{selected_asset['predicted_time_to_threshold']:.1f}", delta=" ")
+        kpi[2].metric("Latest Maintenance Deadline (days)", f"{selected_asset['predicted_time_to_threshold']:.1f}", delta=" ")
         kpi[3].metric("Anomaly Score", f"{latest_row['anomaly_score']:.2f}", delta=f"{anomaly_delta:+.2f}")
         kpi[4].metric("Estimated Mobilization Cost", f"${selected_asset['mobilization_cost']:,.0f}", delta=" ")
 
