@@ -1595,7 +1595,7 @@ def main():
                 st.markdown("#### LLM-Generated Compliance Answer")
                 rag_answer_text = st.session_state.get("rag_answer_cached", default_story)
                 if stream_render:
-                    #st.markdown("##### Streaming Answer")
+                    st.markdown("##### Streaming Answer")
                     typewriter_render(rag_answer_text, speed_ms=30)
                 else:
                     st.info(rag_answer_text)
